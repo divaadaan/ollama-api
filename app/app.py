@@ -1,14 +1,6 @@
-'''''
-This module provides a FastAPI application that interacts with a local LLM API
-
+"""This module provides a FastAPI application that interacts with a local LLM API
 Dependencies:
-- requests
-- dotenv
-- fastapi
-- uvicorn
-- gradio
-- smolagents
-'''''
+- """
 import json
 import os
 import logging
@@ -19,9 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 import gradio as gr
-import pandas as pd
-import inspect
-from smolagents import CodeAgent, DuckDuckGoSearchTool, HfApiModel, Model
+from smolagents import CodeAgent, DuckDuckGoSearchTool, Model
 
 # Configure logging and environment
 logging.basicConfig(level=logging.INFO)
@@ -43,15 +33,13 @@ class PromptRequest(BaseModel):
     temperature: Optional[float] = None
 
 class LLMClient:
-    """
-    Class to abstract over LLM interfaces
-    """
+    """Class to abstract over LLM interfaces"""
     def __init__(self, api_url: str, default_model: str = "mistral"):
         self.api_url = api_url
         self.default_model = default_model
 
     def generate(self, prompt: str, model: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        """Generate text using the specified LLM model."""
+        """Generate text using the provided model."""
         model = model or self.default_model
         payload = {"model": model, "prompt": prompt, "stream": True}
         if "max_tokens" in kwargs and kwargs["max_tokens"]:
@@ -90,28 +78,64 @@ class LLMClient:
             logger.error(f"Request failed: {str(e)}")
             return {"error": f"Request failed: {str(e)}"}
 
-class LLMClientAdapter():
-    def __init__(self, client: LLMClient):
+
+class LLMClientAdapter(Model):
+    def __init__(self, client: LLMClient, **kwargs):
+        super().__init__(**kwargs)
         self.client = client
 
     def __call__(self, messages: list[dict], **kwargs) -> dict:
-        prompt = "\n".join([m["content"] for m in messages])
+        prompt = self._format_messages(messages)
         result = self.client.generate(prompt, **kwargs)
         return {"content": result.get("response", "")}
 
-    def generate(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """
-        Mimics the expected generate method for CodeAgent to work correctly.
-        It uses the LLMClient to generate the response.
-        """
-        return self.client.generate(prompt, **kwargs)
+    def generate(self, messages: list[dict], stop_sequences: list[str] = None, **kwargs):
+        prompt = self._format_messages(messages)
+        result = self.client.generate(prompt, stop_sequences=stop_sequences, **kwargs)
+        return type('Response', (object,), {'content': result.get("response", "")})()
+
+    def _format_messages(self, messages: list[dict]) -> str:
+        """Convert list of message dictionaries to a single prompt string."""
+        formatted_parts = []
+        for message in messages:
+            if isinstance(message, dict):
+                # Handle different message formats
+                if "content" in message:
+                    content = message["content"]
+                    role = message.get("role", "")
+                    if role:
+                        formatted_parts.append(f"{role}: {content}")
+                    else:
+                        formatted_parts.append(content)
+                elif "text" in message:
+                    # Alternative format
+                    formatted_parts.append(message["text"])
+                else:
+                    # Fallback: convert dict to string
+                    formatted_parts.append(str(message))
+            else:
+                # If it's already a string, use it directly
+                formatted_parts.append(str(message))
+
+        return "\n".join(formatted_parts)
 
 class BasicAgent:
     def __init__(self):
         print("BasicAgent initialized.")
         self.agent = CodeAgent(tools=[DuckDuckGoSearchTool()], model=LLMClientAdapter(llm_client))
-        SYSTEM_PROMPT = """You are a general AI assistant..."""
+        SYSTEM_PROMPT = """You are a general AI assistant. I will ask you a question. Report your thoughts, and
+                finish your answer with the following template: FINAL ANSWER: [YOUR FINAL ANSWER].
+                YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated
+                list of numbers and/or strings.
+                If you are asked for a number, don't use comma to write your number neither use units such as $ or
+                percent sign unless specified otherwise.
+                If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write the
+                digits in plain text unless specified otherwise.
+                If you are asked for a comma separated list, apply the above rules depending of whether the element
+                to be put in the list is a number or a string.
+                """
         self.agent.prompt_templates["system_prompt"] += SYSTEM_PROMPT
+
     def __call__(self, question: str) -> str:
         print(f"Agent received question (first 50 chars): {question[:50]}...")
         final_answer = self.agent.run(question)
@@ -163,7 +187,6 @@ def generate(request: PromptRequest):
 
 @app.post("/code-agent")
 def run_agent(request: PromptRequest):
-    # Note: ensure parameter name matches usage below
     result = basic_agent(request.prompt)
     return {"response": result}
 
