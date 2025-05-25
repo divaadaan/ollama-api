@@ -14,6 +14,7 @@ from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 import gradio as gr
 from smolagents import CodeAgent, DuckDuckGoSearchTool, Model
+from contextlib import asynccontextmanager
 
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.trace import TracerProvider
@@ -350,13 +351,13 @@ def run_agent(request: PromptRequest):
     result = basic_agent(request.prompt)
     return {"response": result}
 
-# Start Prometheus metrics server on a separate port
-@app.on_event("startup")
-async def startup_event():
-    # Start Prometheus metrics server on port 8001
+@asynccontextmanager
+async def lifespan(app):
     start_http_server(8001)
     logger.info("Prometheus metrics server started on port 8001")
     logger.info("Metrics available at http://localhost:8001/metrics")
+    yield
+    #one day I'll tidy up...
 
 if __name__ == "__main__":
     def run_agent_ui(prompt: str) -> str:
