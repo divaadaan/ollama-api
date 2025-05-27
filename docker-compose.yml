@@ -1,20 +1,20 @@
 services:
-  # Ollama service for local LLM
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 20s
-      retries: 5
-    restart: unless-stopped
+  ### Ollama service for local LLM uncomment if your machine is not running an ollama instance already###
+  #ollama:
+  #  image: ollama/ollama:latest
+  #  container_name: ollama
+  #  ports:
+  #    - "11434:11434"
+  #  volumes:
+  #    - ollama_data:/root/.ollama
+  #  environment:
+  #    - OLLAMA_HOST=0.0.0.0
+  #  healthcheck:
+  #    test: ["CMD", "ollama", "list"]
+  #    interval: 30s
+  #    timeout: 20s
+  #   retries: 5
+  # restart: unless-stopped
 
   # Full build with telemetry
   llm-api-full:
@@ -38,9 +38,9 @@ services:
       - PORT=${PORT:-8000}
     volumes:
       - ./.env:/app/.env:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
+    #depends_on:
+    #  ollama:
+    #    condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/simple"]
       interval: 30s
@@ -69,9 +69,9 @@ services:
       - PORT=${PORT:-8000}
     volumes:
       - ./.env:/app/.env:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
+    #depends_on:
+    #  ollama:
+    #    condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/simple"]
       interval: 30s
@@ -113,9 +113,9 @@ services:
     volumes:
       - ./:/app  # Mount source for hot reload
       - ./.env:/app/.env:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
+    #depends_on:
+    #  ollama:
+    #    condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health/simple" ]
       interval: 30s
@@ -166,8 +166,8 @@ services:
       - monitoring
 
 volumes:
-  ollama_data:
-    driver: local
+  #ollama_data:
+  # driver: local
   prometheus_data:
     driver: local
   grafana_data:
