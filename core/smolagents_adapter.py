@@ -12,14 +12,22 @@ logger = logging.getLogger(__name__)
 class LLMResponse:
     """Proper response object for smolagents compatibility."""
     content: str
-    token_usage: Dict[str, int]
+    input_tokens: int = 0
+    output_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
     finish_reason: str = "stop"
     model: str = "unknown"
 
-    @property
-    def usage(self) -> Dict[str, int]:
-        """Alias for token_usage for compatibility."""
-        return self.token_usage
+    def __post_init__(self):
+        """Set up token usage dict for compatibility."""
+        self.token_usage = {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens
+        }
+        self.usage = self.token_usage
 
 
 class SmolOllamaAdapter(Model):
@@ -38,7 +46,7 @@ class SmolOllamaAdapter(Model):
         logger.info(
             f"SmolOllamaAdapter initialized with telemetry {'enabled' if llm_client.telemetry_enabled else 'disabled'}")
 
-    def __call__(self, messages: List[Dict], **kwargs) -> Dict[str, str]:
+    def __call__(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
         """Call interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
         result = self.llm_client.generate(prompt, **kwargs)
@@ -46,42 +54,47 @@ class SmolOllamaAdapter(Model):
         if "error" in result:
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
-        return {"content": result["content"]}
-
-    def generate(self, messages: List[Dict], temperature: float = 0.5, stop_sequences: Optional[List[str]] = None,
-                 **kwargs) -> LLMResponse:
-        """
-        Generate interface for smolagents compatibility.
-
-        Args:
-            messages: List of message dictionaries in smolagents format
-            temperature: Temperature for generation
-            stop_sequences: Stop sequences (not implemented in Ollama)
-            **kwargs: Additional generation parameters
-
-        Returns:
-            LLMResponse object with proper smolagents attributes
-        """
-        prompt = self._format_messages(messages)
-
-        # Call the  LLMClient
-        result = self.llm_client.generate(
-            prompt=prompt,
-            temperature=temperature,
-            **kwargs
-        )
-
-        if "error" in result:
-            raise RuntimeError(f"LLM generation failed: {result['error']}")
-
-        # Convert LLMClient response to smolagents format
-        return LLMResponse(
-            content=result["content"],
-            token_usage={
+        # Return dict with ALL expected smolagents fields
+        return {
+            "content": result["content"],
+            "input_tokens": result.get("prompt_tokens", 0),
+            "output_tokens": result.get("completion_tokens", 0),
+            "prompt_tokens": result.get("prompt_tokens", 0),
+            "completion_tokens": result.get("completion_tokens", 0),
+            "total_tokens": result.get("total_tokens", 0),
+            "token_usage": {
                 "prompt_tokens": result.get("prompt_tokens", 0),
                 "completion_tokens": result.get("completion_tokens", 0),
                 "total_tokens": result.get("total_tokens", 0)
             },
+            "usage": {
+                "prompt_tokens": result.get("prompt_tokens", 0),
+                "completion_tokens": result.get("completion_tokens", 0),
+                "total_tokens": result.get("total_tokens", 0)
+            },
+            "finish_reason": result.get("finish_reason", "stop"),
+            "model": result.get("model", "unknown")
+        }
+
+    def generate(self, messages: List[Dict], temperature: float = 0.5, stop_sequences: Optional[List[str]] = None,
+                 **kwargs) -> LLMResponse:
+        prompt = self._format_messages(messages)
+        result = self.llm_client.generate(prompt=prompt, temperature=temperature, **kwargs)
+
+        if "error" in result:
+            raise RuntimeError(f"LLM generation failed: {result['error']}")
+
+        prompt_tokens = result.get("prompt_tokens", 0)
+        completion_tokens = result.get("completion_tokens", 0)
+        total_tokens = result.get("total_tokens", 0)
+
+        return LLMResponse(
+            content=result["content"],
+            input_tokens=prompt_tokens,  # smolagents expects this
+            output_tokens=completion_tokens,  # smolagents expects this
+            prompt_tokens=prompt_tokens,  # traditional name
+            completion_tokens=completion_tokens,  # traditional name
+            total_tokens=total_tokens,  # traditional name
             finish_reason=result.get("finish_reason", "stop"),
             model=result.get("model", "unknown")
         )
