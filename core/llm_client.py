@@ -172,15 +172,15 @@ class LLMClient:
             Dictionary with health status information
         """
         if timeout is None:
-            timeout = int(os.getenv("HEALTH_CHECK_TIMEOUT", "30"))
+            timeout = int(os.getenv("HEALTH_CHECK_TIMEOUT", "10"))
 
         with self._tracer.start_span("llm_health_check") as span:
             span.set_attribute("llm.api_url", self.api_url)
             span.set_attribute("llm.timeout", timeout)
 
             try:
-                result = self.generate("Hello", max_tokens=5)
-
+                result = self.generate("Hello", max_tokens=1)
+                logger.info(f"Reponse from model to Hello {result}")
                 if "error" not in result and result.get("response"):
                     span.set_status(SpanStatus.OK)
                     return {
