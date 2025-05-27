@@ -34,10 +34,10 @@ class LLMClientAdapter(Model):
     def __call__(self, messages: list[dict], **kwargs) -> dict:
         """Call interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt, temperature=0.1, **kwargs)
+        result = self.llm_client.generate(prompt, temperature=0.5, **kwargs)
         return {"content": result.get("response", "")}
 
-    def generate(self, messages: list[dict], temperature=0.1, stop_sequences: list[str] = None, **kwargs):
+    def generate(self, messages: list[dict], temperature=0.5, stop_sequences: list[str] = None, **kwargs):
         """Generate interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
         result = self.llm_client.generate(prompt, stop_sequences=stop_sequences, **kwargs)
