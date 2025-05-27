@@ -29,6 +29,8 @@ services:
       - LLM_API_URL=${LLM_API_URL:-http://ollama:11434/api/generate}
       - DEFAULT_MODEL=${DEFAULT_MODEL:-mistral}
       - TELEMETRY_ENABLED=true
+      - TELEMETRY_METRICS_PORT=8001
+      - TELEMETRY_CONSOLE_EXPORT=${TELEMETRY_CONSOLE_EXPORT:-false}
       - MAX_TIMEOUT=${MAX_TIMEOUT:-60}
       - STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-120}
       - HEALTH_CHECK_TIMEOUT=${HEALTH_CHECK_TIMEOUT:-30}
@@ -88,20 +90,38 @@ services:
     container_name: llm-api-dev
     ports:
       - "8000:8000"
-      - "8001:8001"
+      - "8001:8001"  # Prometheus metrics
     environment:
-      - LLM_API_URL=http://ollama:11434/api/generate
-      - DEFAULT_MODEL=mistral
+      # Core API Configuration (consistent with lite/full)
+      - LLM_API_URL=${LLM_API_URL:-http://ollama:11434/api/generate}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-mistral}
+      - MAX_TIMEOUT=${MAX_TIMEOUT:-60}
+      - STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-120}
+      - HEALTH_CHECK_TIMEOUT=${HEALTH_CHECK_TIMEOUT:-30}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+
+      # Telemetry Configuration
       - TELEMETRY_ENABLED=true
-      - TELEMETRY_CONSOLE_EXPORT=true
+      - TELEMETRY_METRICS_PORT=8001
+      - TELEMETRY_CONSOLE_EXPORT=true  # Enable for debugging
+
+      # Development-Specific Settings
       - DEBUG=true
       - RELOAD=true
+      - LOG_LEVEL=DEBUG
     volumes:
       - ./:/app  # Mount source for hot reload
       - ./.env:/app/.env:ro
     depends_on:
       ollama:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health/simple" ]
+      interval: 30s
+      timeout: ${HEALTH_CHECK_TIMEOUT:-10}s
+      retries: 3
+      start_period: ${STARTUP_TIMEOUT:-120}s
     restart: unless-stopped
     profiles:
       - dev

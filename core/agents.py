@@ -77,9 +77,6 @@ class LLMClientAdapter(Model):
 class BasicAgent:
     """
     AI Agent with optional telemetry support via dependency injection.
-
-    The agent works identically whether telemetry is enabled or disabled,
-    with zero performance overhead when telemetry is off.
     """
 
     def __init__(
@@ -90,7 +87,6 @@ class BasicAgent:
     ):
         """
         Initialize BasicAgent.
-
         Args:
             llm_client: LLMClient instance for language model access
             telemetry: Optional telemetry configuration. If None, uses llm_client's telemetry
