@@ -168,6 +168,7 @@ def root():
             "/generate": "POST - Text generation endpoint",
             "/code-agent": "POST - AI agent endpoint",
             "/health": "GET - Health check",
+            "/health/simple": "GET - Simple health check - no agent execution",
             "/metrics": "GET - Metrics information",
             "/telemetry": "GET - Telemetry status"
         },
@@ -196,6 +197,25 @@ def health_check():
         }
     }
 
+@app.get("/health/simple")
+def simple_health_check():
+    """Simple health check without agent execution."""
+    try:
+        return {
+            "status": "healthy",
+            "components": {
+                "llm_client_initialized": llm_client is not None,
+                "agent_initialized": basic_agent is not None,
+                "ollama_url": llm_client.api_url if llm_client else None,
+                "default_model": llm_client.default_model if llm_client else None
+            },
+            "telemetry": {
+                "enabled": telemetry_config.enabled if telemetry_config else False,
+                "available": is_telemetry_available()
+            }
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/telemetry")
 def telemetry_status():

@@ -34,10 +34,10 @@ class LLMClientAdapter(Model):
     def __call__(self, messages: list[dict], **kwargs) -> dict:
         """Call interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt, **kwargs)
+        result = self.llm_client.generate(prompt, temperature=0.5, **kwargs)
         return {"content": result.get("response", "")}
 
-    def generate(self, messages: list[dict], stop_sequences: list[str] = None, **kwargs):
+    def generate(self, messages: list[dict], temperature=0.5, stop_sequences: list[str] = None, **kwargs):
         """Generate interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
         result = self.llm_client.generate(prompt, stop_sequences=stop_sequences, **kwargs)
@@ -98,9 +98,6 @@ class BasicAgent:
         """
         self.llm_client = llm_client
 
-        # Debug logging
-        #logger.info(f"LLM client telemetry enabled: {getattr(llm_client, 'telemetry_enabled', 'unknown')}")
-
         # Set up telemetry - inherit from LLM client if not provided
         if telemetry is None:
             if hasattr(llm_client, '_telemetry'):
@@ -111,7 +108,6 @@ class BasicAgent:
                 telemetry = TelemetryConfig(enabled=False)
 
         self._telemetry = telemetry
-        #logger.info(f"BasicAgent final telemetry enabled: {telemetry.enabled}")
 
         self._tracer = telemetry.tracer
 
@@ -130,20 +126,31 @@ class BasicAgent:
         )
 
         # Configure system prompt
-        SYSTEM_PROMPT = """You are a general AI assistant. I will ask you a question. Report your thoughts, and
-        finish your answer with the following template: FINAL ANSWER: [YOUR FINAL ANSWER].
-        YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated
-        list of numbers and/or strings.
-        If you are asked for a number, don't use comma to write your number neither use units such as $ or
-        percent sign unless specified otherwise.
-        If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write the
-        digits in plain text unless specified otherwise.
-        If you are asked for a comma separated list, apply the above rules depending of whether the element
-        to be put in the list is a number or a string.
+        SYSTEM_PROMPT = """
+        ADDITIONAL INSTRUCTIONS for this specific agent:
+
+        You are a general AI assistant. When solving tasks, follow this approach:
+        1. Think through the problem step by step
+        2. Use code to perform calculations or operations when needed
+        3. Always call final_answer() with a string argument containing your result
+
+        For your final answer format:
+        - If asked for a number: provide just the number as a string (no commas, no units like $ or % unless specified)
+        - If asked for a string: use few words as possible, no articles, no abbreviations, write digits in plain text
+        - If asked for a list: provide comma separated values following the above rules
+
+        Examples:
+        - For "What is 2+2?": final_answer("4")
+        - For "Capital of France?": final_answer("Paris")  
+        - For "List first 3 primes": final_answer("2, 3, 5")
+
+        CRITICAL:
+        - Always convert your result to a string before calling final_answer()
+        - For math: final_answer(str(calculation_result))
+        - Keep code simple and direct
+        - Use the standard smolagents format with <end_code>
         """
         self.agent.system_prompt += SYSTEM_PROMPT
-
-        #logger.info(f"BasicAgent initialized with telemetry {'enabled' if telemetry.enabled else 'disabled'}")
 
     def __call__(self, question: str) -> str:
         """
@@ -213,19 +220,15 @@ class BasicAgent:
         """
         with self._tracer.start_span("agent_health_check") as span:
             try:
-                # Check LLM client health
-                llm_health = self.llm_client.health_check()
-
                 # Quick agent test
-                test_result = self("What is 2+2?")
+                test_result = self("Hello, just respond with 'Agent OK'")
 
                 span.set_status(SpanStatus.OK)
                 return {
                     "status": "healthy",
-                    "llm_client_status": llm_health.get("status", "unknown"),
                     "tools_count": len(self.agent.tools),
                     "telemetry_enabled": self._telemetry.enabled,
-                    "test_response_length": len(test_result)
+                    "test_response_length": len(str(test_result))
                 }
 
             except Exception as e:

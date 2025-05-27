@@ -40,9 +40,9 @@ services:
       ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/simple"]
       interval: 30s
-      timeout: 20s
+      timeout: 10s
       retries: 3
     restart: unless-stopped
     profiles:
@@ -71,9 +71,9 @@ services:
       ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/simple"]
       interval: 30s
-      timeout:  ${HEALTH_CHECK_TIMEOUT:-30}s
+      timeout:  ${HEALTH_CHECK_TIMEOUT:-10}s
       retries: 3
       start_period: ${STARTUP_TIMEOUT:-120}s
     restart: unless-stopped
