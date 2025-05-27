@@ -1,82 +1,23 @@
-"""
-LLMClientAdapter class for abstracting to local LLM ollama instance
-"""
+"""AI Agent using the new architecture with clean separation of concerns."""
 
 import logging
 import time
 from typing import Optional
 
-from smolagents import CodeAgent, DuckDuckGoSearchTool, Model
+from smolagents import CodeAgent, DuckDuckGoSearchTool
 
 from telemetry import TelemetryConfig, SpanStatus
+from .smolagents_adapter import SmolOllamaAdapter
 
 logger = logging.getLogger(__name__)
-
-
-class LLMClientAdapter(Model):
-    """
-    Adapter to make LLMClient compatible with smolagents Model interface.
-
-    This adapter also handles telemetry forwarding from the agent to the LLM client.
-    """
-
-    def __init__(self, llm_client, **kwargs):
-        """
-        Initialize adapter with LLM client.
-
-        Args:
-            llm_client: LLMClient instance (with or without telemetry)
-            **kwargs: Additional Model parameters
-        """
-        super().__init__(**kwargs)
-        self.llm_client = llm_client
-
-    def __call__(self, messages: list[dict], **kwargs) -> dict:
-        """Call interface for smolagents compatibility."""
-        prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt, temperature=0.5, **kwargs)
-        return {"content": result.get("response", "")}
-
-    def generate(self, messages: list[dict], temperature=0.5, stop_sequences: list[str] = None, **kwargs):
-        """Generate interface for smolagents compatibility."""
-        prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt, stop_sequences=stop_sequences, **kwargs)
-        return type('Response', (object,), {'content': result.get("response", "")})()
-
-    def _format_messages(self, messages: list[dict]) -> str:
-        """Convert list of message dictionaries to a single prompt string."""
-        formatted_parts = []
-        for message in messages:
-            if isinstance(message, dict):
-                # Handle different message formats
-                if "content" in message:
-                    content = message["content"]
-                    role = message.get("role", "")
-                    if role:
-                        formatted_parts.append(f"{role}: {content}")
-                    else:
-                        formatted_parts.append(content)
-                elif "text" in message:
-                    # Alternative format
-                    formatted_parts.append(message["text"])
-                else:
-                    # Fallback: convert dict to string
-                    formatted_parts.append(str(message))
-            else:
-                # If it's already a string, use it directly
-                formatted_parts.append(str(message))
-
-        return "\n".join(formatted_parts)
-
-    @property
-    def telemetry_enabled(self) -> bool:
-        """Check if the underlying LLM client has telemetry enabled."""
-        return getattr(self.llm_client, 'telemetry_enabled', False)
 
 
 class BasicAgent:
     """
     AI Agent with optional telemetry support via dependency injection.
+
+    The agent works identically whether telemetry is enabled or disabled,
+    with zero performance overhead when telemetry is off.
     """
 
     def __init__(
@@ -87,6 +28,7 @@ class BasicAgent:
     ):
         """
         Initialize BasicAgent.
+
         Args:
             llm_client: LLMClient instance for language model access
             telemetry: Optional telemetry configuration. If None, uses llm_client's telemetry
@@ -104,7 +46,6 @@ class BasicAgent:
                 telemetry = TelemetryConfig(enabled=False)
 
         self._telemetry = telemetry
-
         self._tracer = telemetry.tracer
 
         # Pre-fetch metrics for performance
@@ -115,10 +56,13 @@ class BasicAgent:
         if tools is None:
             tools = [DuckDuckGoSearchTool()]
 
+        # Create the smolagents adapter
+        self.model_adapter = SmolOllamaAdapter(llm_client)
+
         # Initialize the smolagents CodeAgent
         self.agent = CodeAgent(
             tools=tools,
-            model=LLMClientAdapter(llm_client)
+            model=self.model_adapter
         )
 
         # Configure system prompt
@@ -147,6 +91,8 @@ class BasicAgent:
         - Use the standard smolagents format with <end_code>
         """
         self.agent.system_prompt += SYSTEM_PROMPT
+
+        logger.info(f"BasicAgent initialized with telemetry {'enabled' if telemetry.enabled else 'disabled'}")
 
     def __call__(self, question: str) -> str:
         """
@@ -216,6 +162,18 @@ class BasicAgent:
         """
         with self._tracer.start_span("agent_health_check") as span:
             try:
+                # Check the adapter health first
+                adapter_health = self.model_adapter.health_check()
+
+                if adapter_health["status"] != "healthy":
+                    span.set_status(SpanStatus.ERROR, "Adapter health check failed")
+                    return {
+                        "status": "unhealthy",
+                        "error": "Adapter health check failed",
+                        "adapter_health": adapter_health,
+                        "telemetry_enabled": self._telemetry.enabled
+                    }
+
                 # Quick agent test
                 test_result = self("Hello, just respond with 'Agent OK'")
 
@@ -224,7 +182,8 @@ class BasicAgent:
                     "status": "healthy",
                     "tools_count": len(self.agent.tools),
                     "telemetry_enabled": self._telemetry.enabled,
-                    "test_response_length": len(str(test_result))
+                    "test_response_length": len(str(test_result)),
+                    "adapter_health": adapter_health
                 }
 
             except Exception as e:
@@ -250,11 +209,13 @@ class BasicAgent:
         """
         return {
             "tools": [tool.__class__.__name__ for tool in self.agent.tools],
-            "model_adapter": self.agent.model.__class__.__name__,
+            "model_adapter": self.model_adapter.__class__.__name__,
             "llm_client_type": self.llm_client.__class__.__name__,
             "telemetry_enabled": self.telemetry_enabled,
-            "llm_telemetry_enabled": self.llm_client.telemetry_enabled
+            "llm_telemetry_enabled": self.llm_client.telemetry_enabled,
+            "architecture": "Option2_CleanSeparation"
         }
+
 
 # Factory function for easy creation
 def create_basic_agent(

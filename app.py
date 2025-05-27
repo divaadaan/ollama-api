@@ -11,14 +11,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 
-# Core functionality imports - no telemetry dependencies
+# Core functionality imports
 from core.llm_client import create_llm_client
 from core.agents import create_basic_agent
 
-# Telemetry imports - gracefully handle missing dependencies
+# Telemetry imports
 from telemetry import get_telemetry_config, is_telemetry_available
 
-# Conditionally import quick_setup only if available
+#  import quick_setup if available
 try:
     from telemetry import quick_setup
 except ImportError:
