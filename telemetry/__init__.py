@@ -62,6 +62,13 @@ def get_telemetry_config(
 
     return TelemetryConfig(enabled=enabled)
 
+def get_telemetry_info() -> dict:
+    """Get information about telemetry availability and configuration."""
+    return {
+        "enabled": os.getenv("TELEMETRY_ENABLED", "false").lower() == "true",
+        "available": is_telemetry_available(),
+        "config_source": "environment" if os.getenv("TELEMETRY_ENABLED") else "default"
+    }
 
 # Try to import advanced features
 try:
@@ -75,7 +82,8 @@ __all__ = [
     'TelemetryConfig',
     'get_telemetry_config',
     'is_telemetry_available',
-    'SpanStatus'
+    'SpanStatus',
+    'get_telemetry_info'
 ]
 
 if quick_setup:

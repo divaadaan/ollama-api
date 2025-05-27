@@ -17,7 +17,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from prometheus_client import start_http_server
 
-from .telemetry_interface import (
+from .interface import (
     TelemetryProvider,
     TelemetryTracer,
     TelemetrySpan,

@@ -55,7 +55,7 @@ class SmolOllamaAdapter(Model):
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
         # Return dict with ALL expected smolagents fields
-        return {
+        response_dict =  {
             "content": result["content"],
             "input_tokens": result.get("prompt_tokens", 0),
             "output_tokens": result.get("completion_tokens", 0),
@@ -76,6 +76,10 @@ class SmolOllamaAdapter(Model):
             "model": result.get("model", "unknown")
         }
 
+        logger.info(f"__call__ returning dict with keys: {list(response_dict.keys())}")
+        logger.info(f"__call__ input_tokens value: {response_dict.get('input_tokens', 'MISSING')}")
+        return response_dict
+
     def generate(self, messages: List[Dict], temperature: float = 0.5, stop_sequences: Optional[List[str]] = None,
                  **kwargs) -> LLMResponse:
         prompt = self._format_messages(messages)
@@ -88,7 +92,7 @@ class SmolOllamaAdapter(Model):
         completion_tokens = result.get("completion_tokens", 0)
         total_tokens = result.get("total_tokens", 0)
 
-        return LLMResponse(
+        response = LLMResponse(
             content=result["content"],
             input_tokens=prompt_tokens,  # smolagents expects this
             output_tokens=completion_tokens,  # smolagents expects this
@@ -98,6 +102,12 @@ class SmolOllamaAdapter(Model):
             finish_reason=result.get("finish_reason", "stop"),
             model=result.get("model", "unknown")
         )
+
+        logger.info(f"generate() returning LLMResponse with input_tokens: {response.input_tokens}")
+        logger.info(f"generate() LLMResponse attributes: {dir(response)}")
+
+        return response
+
 
     def _format_messages(self, messages: List[Dict]) -> str:
         """

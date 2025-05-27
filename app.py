@@ -11,18 +11,12 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 
-# Core functionality imports
+# Core functionality imports - no telemetry dependencies
 from core.llm_client import create_llm_client
 from core.agents import create_basic_agent
 
-# Telemetry imports
+# Telemetry imports - gracefully handle missing dependencies
 from telemetry import get_telemetry_config, is_telemetry_available
-
-#  import quick_setup if available
-try:
-    from telemetry import quick_setup
-except ImportError:
-    quick_setup = None
 
 # Configure logging and environment
 logging.basicConfig(level=logging.INFO)
@@ -68,40 +62,6 @@ def startup_health_checks():
 
     logger.info("✅ All health checks passed - starting application")
 
-def initialize_telemetry(app: FastAPI) -> None:
-    """
-    Initialize telemetry based on configuration.
-
-    This function encapsulates all telemetry setup, making it easy to
-    conditionally enable/disable monitoring.
-    """
-    global telemetry_config
-
-    # Get telemetry configuration from environment
-    telemetry_config = get_telemetry_config()
-
-    if telemetry_config.enabled:
-        if is_telemetry_available():
-            logger.info("Initializing telemetry with OpenTelemetry")
-
-            # Set up telemetry with FastAPI instrumentation
-            if quick_setup:
-                quick_setup(
-                    app=app,
-                    enable_console_export=os.getenv("TELEMETRY_CONSOLE_EXPORT", "false").lower() == "true",
-                    metrics_port=int(os.getenv("TELEMETRY_METRICS_PORT", "8001")),
-                    start_metrics_server=True
-                )
-                logger.info("✅ Telemetry initialized successfully")
-            else:
-                logger.info("✅ disabled - quick_setup not available")
-        else:
-            logger.warning("Telemetry enabled but OpenTelemetry dependencies not available")
-            logger.warning("Install with: pip install opentelemetry-api opentelemetry-sdk ...")
-            # telemetry_config will use null implementations
-    else:
-        logger.info("Telemetry disabled via configuration")
-
 
 def initialize_clients() -> None:
     """Initialize LLM client and agent with shared telemetry configuration."""
@@ -130,14 +90,25 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting FastAPI application")
 
-    # Initialize telemetry first
-    initialize_telemetry(app)
-
     # Initialize clients
     initialize_clients()
 
     # Run health checks
     startup_health_checks()
+
+    # Start metrics server if telemetry is enabled
+    if telemetry_config.enabled and is_telemetry_available():
+        try:
+            # Import and start metrics server
+            from telemetry.opentelemetry_provider import OpenTelemetryProvider
+            provider = OpenTelemetryProvider(
+                enable_console_export=os.getenv("TELEMETRY_CONSOLE_EXPORT", "false").lower() == "true",
+                metrics_port=int(os.getenv("TELEMETRY_METRICS_PORT", "8001"))
+            )
+            provider.start_metrics_server()
+            logger.info("✅ Metrics server started")
+        except Exception as e:
+            logger.warning(f"Failed to start metrics server: {e}")
 
     logger.info("🎉 Application startup complete")
 
@@ -148,13 +119,25 @@ async def lifespan(app: FastAPI):
     # Could add cleanup logic here if needed
 
 
-# FastAPI app with lifespan
+# Initialize telemetry configuration early
+telemetry_config = get_telemetry_config()
+
+# Create FastAPI app
 app = FastAPI(
     title="Local LLM API",
     description="FastAPI application for interacting with local LLM models with optional telemetry",
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Instrument FastAPI if telemetry is enabled (must be done before app starts)
+if telemetry_config.enabled and is_telemetry_available():
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("✅ FastAPI instrumented with OpenTelemetry")
+    except Exception as e:
+        logger.warning(f"Failed to instrument FastAPI: {e}")
 
 
 # API Endpoints
@@ -220,14 +203,18 @@ def simple_health_check():
 @app.get("/telemetry")
 def telemetry_status():
     """Get telemetry configuration and status."""
-    from telemetry import get_telemetry_info
+    info = {
+        "enabled": telemetry_config.enabled,
+        "available": is_telemetry_available(),
+        "config_source": "environment" if os.getenv("TELEMETRY_ENABLED") else "default"
+    }
 
-    info = get_telemetry_info()
-    info.update({
-        "current_config_enabled": telemetry_config.enabled,
-        "llm_client_telemetry": llm_client.telemetry_enabled,
-        "agent_telemetry": basic_agent.telemetry_enabled
-    })
+    if telemetry_config:
+        info.update({
+            "current_config_enabled": telemetry_config.enabled,
+            "llm_client_telemetry": llm_client.telemetry_enabled if llm_client else None,
+            "agent_telemetry": basic_agent.telemetry_enabled if basic_agent else None
+        })
 
     return info
 
