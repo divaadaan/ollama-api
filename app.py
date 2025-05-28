@@ -83,30 +83,21 @@ def initialize_clients() -> None:
     logger.info("✅ Clients initialized successfully")
 
 
-@asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context manager for startup/shutdown logic."""
-
-    # Startup
     logger.info("🚀 Starting FastAPI application")
-
-    # Initialize clients
     initialize_clients()
-
-    # Run health checks
     startup_health_checks()
 
-    # Start metrics server if telemetry is enabled
     if telemetry_config.enabled and is_telemetry_available():
         try:
-            # Import and start metrics server
-            from telemetry.opentelemetry_provider import OpenTelemetryProvider
-            provider = OpenTelemetryProvider(
-                enable_console_export=os.getenv("TELEMETRY_CONSOLE_EXPORT", "false").lower() == "true",
-                metrics_port=int(os.getenv("TELEMETRY_METRICS_PORT", "8001"))
-            )
-            provider.start_metrics_server()
-            logger.info("✅ Metrics server started")
+            provider = telemetry_config.provider
+
+            if hasattr(provider, 'start_metrics_server'): #specific to OpenTelemetry?
+                provider.start_metrics_server()
+                logger.info("✅ Metrics server started")
+            else:
+                logger.warning("Provider does not support metrics server")
         except Exception as e:
             logger.warning(f"Failed to start metrics server: {e}")
 
@@ -114,9 +105,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     logger.info("🛑 Application shutting down")
-    # Could add cleanup logic here if needed
 
 
 # Initialize telemetry configuration early
@@ -328,7 +317,6 @@ if __name__ == "__main__":
     telemetry_config = get_telemetry_config()
     initialize_clients()
 
-    # Option 1: Run Gradio interface
     iface = gr.Interface(
         fn=run_agent_ui,
         inputs="text",
@@ -337,6 +325,3 @@ if __name__ == "__main__":
         description="Test the AI agent with your questions"
     )
     iface.launch()
-
-    # Option 2: Run FastAPI server
-    # uvicorn.run(app, host="0.0.0.0", port=8000)

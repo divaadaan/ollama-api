@@ -91,7 +91,7 @@ class SmolOllamaAdapter(Model):
         if "error" in result:
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
-        content = result.get("response", "")
+        content = result.get("content", "")
 
         token_usage = TokenUsage(
             input_tokens=result.get("prompt_tokens", 0),
