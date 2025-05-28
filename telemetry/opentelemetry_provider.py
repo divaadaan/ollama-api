@@ -1,8 +1,6 @@
 """
 OpenTelemetry implementation of the telemetry abstraction interface.
-
-This module should only be imported when telemetry is enabled, keeping
-OpenTelemetry dependencies optional for the core application.
+This module is optionally imported depending on if telemetry is enabled
 """
 
 from contextlib import contextmanager
@@ -29,7 +27,6 @@ from .interface import (
 
 class OpenTelemetrySpan:
     """OpenTelemetry implementation of TelemetrySpan"""
-
     def __init__(self, otel_span):
         self._span = otel_span
 
@@ -45,7 +42,6 @@ class OpenTelemetrySpan:
 
 class OpenTelemetryTracer:
     """OpenTelemetry implementation of TelemetryTracer"""
-
     def __init__(self, otel_tracer):
         self._tracer = otel_tracer
 
@@ -57,7 +53,6 @@ class OpenTelemetryTracer:
 
 class OpenTelemetryCounter:
     """OpenTelemetry implementation of TelemetryCounter"""
-
     def __init__(self, otel_counter):
         self._counter = otel_counter
 
@@ -67,7 +62,6 @@ class OpenTelemetryCounter:
 
 class OpenTelemetryHistogram:
     """OpenTelemetry implementation of TelemetryHistogram"""
-
     def __init__(self, otel_histogram):
         self._histogram = otel_histogram
 
@@ -77,11 +71,9 @@ class OpenTelemetryHistogram:
 
 class OpenTelemetryProvider:
     """OpenTelemetry implementation of TelemetryProvider"""
-
     def __init__(self, enable_console_export: bool = False, metrics_port: int = 8001):
         """
         Initialize OpenTelemetry provider with full configuration.
-
         Args:
             enable_console_export: Whether to enable console span export for development
             metrics_port: Port for Prometheus metrics server
@@ -144,7 +136,6 @@ class OpenTelemetryProvider:
 
 
 # Utility functions for easy setup
-
 def setup_telemetry(
         app=None,
         enable_console_export: bool = False,
@@ -152,14 +143,12 @@ def setup_telemetry(
         start_metrics_server: bool = True
 ) -> OpenTelemetryProvider:
     """
-    Convenience function to setup OpenTelemetry with common configuration.
-
+    Setup OpenTelemetry with common configuration.
     Args:
         app: FastAPI application instance to instrument (optional)
         enable_console_export: Enable console span export for development
         metrics_port: Port for Prometheus metrics server
         start_metrics_server: Whether to start the metrics server immediately
-
     Returns:
         Configured OpenTelemetryProvider instance
     """

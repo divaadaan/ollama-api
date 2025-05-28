@@ -1,6 +1,5 @@
-"""Telemetry abstraction interface for optional monitoring support."""
+"""Telemetry abstraction interface for optional monitoring"""
 
-from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from typing import Any, Dict, Optional, Protocol, runtime_checkable
 from enum import Enum
@@ -15,11 +14,9 @@ class SpanStatus(Enum):
 @runtime_checkable
 class TelemetrySpan(Protocol):
     """Protocol for telemetry spans"""
-
     def set_attribute(self, key: str, value: Any) -> None:
         """Set an attribute on the span"""
         ...
-
     def set_status(self, status: SpanStatus, description: Optional[str] = None) -> None:
         """Set the status of the span"""
         ...
@@ -28,7 +25,6 @@ class TelemetrySpan(Protocol):
 @runtime_checkable
 class TelemetryTracer(Protocol):
     """Protocol for telemetry tracers"""
-
     @contextmanager
     def start_span(self, name: str) -> TelemetrySpan:
         """Start a new span context manager"""
@@ -38,7 +34,6 @@ class TelemetryTracer(Protocol):
 @runtime_checkable
 class TelemetryCounter(Protocol):
     """Protocol for telemetry counters"""
-
     def add(self, amount: int = 1, attributes: Optional[Dict[str, str]] = None) -> None:
         """Add to the counter"""
         ...
@@ -47,7 +42,6 @@ class TelemetryCounter(Protocol):
 @runtime_checkable
 class TelemetryHistogram(Protocol):
     """Protocol for telemetry histograms"""
-
     def record(self, amount: float, attributes: Optional[Dict[str, str]] = None) -> None:
         """Record a value in the histogram"""
         ...
@@ -56,76 +50,57 @@ class TelemetryHistogram(Protocol):
 @runtime_checkable
 class TelemetryProvider(Protocol):
     """Protocol for the main telemetry provider"""
-
     def get_tracer(self, name: str) -> TelemetryTracer:
         """Get a tracer instance"""
         ...
-
     def create_counter(self, name: str, description: str = "") -> TelemetryCounter:
         """Create a counter metric"""
         ...
-
     def create_histogram(self, name: str, description: str = "") -> TelemetryHistogram:
         """Create a histogram metric"""
         ...
 
 
 # Null implementations for when telemetry is disabled
-
 class NullSpan:
-    """No-op implementation of TelemetrySpan"""
-
     def set_attribute(self, key: str, value: Any) -> None:
         pass
-
     def set_status(self, status: SpanStatus, description: Optional[str] = None) -> None:
         pass
 
 
 class NullTracer:
-    """No-op implementation of TelemetryTracer"""
-
     @contextmanager
     def start_span(self, name: str) -> TelemetrySpan:
         yield NullSpan()
 
 
 class NullCounter:
-    """No-op implementation of TelemetryCounter"""
-
     def add(self, amount: int = 1, attributes: Optional[Dict[str, str]] = None) -> None:
         pass
 
 
 class NullHistogram:
-    """No-op implementation of TelemetryHistogram"""
-
     def record(self, amount: float, attributes: Optional[Dict[str, str]] = None) -> None:
         pass
 
 
 class NullTelemetryProvider:
     """No-op implementation of TelemetryProvider"""
-
     def get_tracer(self, name: str) -> TelemetryTracer:
         return NullTracer()
-
     def create_counter(self, name: str, description: str = "") -> TelemetryCounter:
         return NullCounter()
-
     def create_histogram(self, name: str, description: str = "") -> TelemetryHistogram:
         return NullHistogram()
 
 
 # Factory function for creating telemetry providers
-
 def create_telemetry_provider(enabled: bool = True) -> TelemetryProvider:
     """
     Factory function to create appropriate telemetry provider.
-
     Args:
         enabled: Whether to enable real telemetry or use null implementation
-
     Returns:
         TelemetryProvider instance (real or null implementation)
     """
@@ -143,7 +118,6 @@ def create_telemetry_provider(enabled: bool = True) -> TelemetryProvider:
 
 
 # Convenience class for dependency injection
-
 class TelemetryConfig:
     """Configuration and factory for telemetry components"""
 
@@ -151,10 +125,8 @@ class TelemetryConfig:
         self.enabled = enabled
         self._provider = create_telemetry_provider(enabled)
 
-        # Pre-create commonly used components
         self.tracer = self._provider.get_tracer(__name__)
 
-        # Common metrics
         self.llm_request_counter = self._provider.create_counter(
             "llm_requests_total",
             "Total number of LLM requests"

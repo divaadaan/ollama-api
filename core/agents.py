@@ -15,12 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class BasicAgent:
-    """
-    AI Agent with optional telemetry support via dependency injection.
-
-    The agent works identically whether telemetry is enabled or disabled,
-    with zero performance overhead when telemetry is off.
-    """
+    """This is a BasicAgent """
 
     def __init__(
             self,
@@ -30,7 +25,6 @@ class BasicAgent:
     ):
         """
         Initialize BasicAgent.
-
         Args:
             llm_client: LLMClient instance for language model access
             telemetry: Optional telemetry configuration. If None, uses llm_client's telemetry
@@ -95,10 +89,8 @@ class BasicAgent:
     def __call__(self, question: str) -> str:
         """
         Execute agent on a question.
-
         Args:
             question: Question or task for the agent to process
-
         Returns:
             Agent's response/answer
         """
@@ -108,7 +100,6 @@ class BasicAgent:
         with self._tracer.start_span("agent_run") as span:
             start_time = time.time()
 
-            # Set span attributes (no-op if telemetry disabled)
             span.set_attribute("agent.question_length", len(question))
             span.set_attribute("agent.tools_count", len(self.agent.tools))
             span.set_attribute("agent.model_telemetry", self.llm_client.telemetry_enabled)
@@ -117,14 +108,9 @@ class BasicAgent:
                 # Execute the agent
                 final_answer = self.agent.run(question)
 
-                # Record successful completion
                 duration = time.time() - start_time
-
-                # All telemetry calls are no-ops if telemetry is disabled
                 self._request_counter.add(1, {"status": "success"})
                 self._response_time.record(duration)
-
-                # Set successful span attributes
                 span.set_attribute("agent.response_length", len(str(final_answer)))
                 span.set_attribute("agent.duration_seconds", duration)
                 span.set_status(SpanStatus.OK)
@@ -134,11 +120,9 @@ class BasicAgent:
                 return final_answer
 
             except Exception as e:
-                # Record agent errors
                 duration = time.time() - start_time
                 error_msg = f"Agent execution failed: {str(e)}"
 
-                # Telemetry for errors (no-op if disabled)
                 self._request_counter.add(1, {"status": "error"})
                 span.set_attribute("agent.duration_seconds", duration)
                 span.set_attribute("agent.error_message", str(e))
@@ -154,13 +138,11 @@ class BasicAgent:
     def health_check(self) -> dict:
         """
         Perform a health check of the agent and its dependencies.
-
         Returns:
             Dictionary with health status information
         """
         with self._tracer.start_span("agent_health_check") as span:
             try:
-                # Quick agent test
                 test_result = self("Hello, just respond with 'Agent OK'")
 
                 span.set_status(SpanStatus.OK)
@@ -188,7 +170,6 @@ class BasicAgent:
     def get_stats(self) -> dict:
         """
         Get runtime statistics about the agent.
-
         Returns:
             Dictionary with agent statistics
         """
@@ -201,7 +182,7 @@ class BasicAgent:
         }
 
 
-# Factory function for easy creation
+# Factory function
 def create_basic_agent(
         llm_client,
         tools: Optional[list] = None,
@@ -210,13 +191,11 @@ def create_basic_agent(
 ) -> BasicAgent:
     """
     Factory function to create BasicAgent with optional telemetry.
-
     Args:
         llm_client: LLMClient instance
         tools: Optional list of tools for the agent
         telemetry_enabled: Whether to enable telemetry (overrides llm_client setting)
         telemetry_config: Pre-configured telemetry, overrides other telemetry settings
-
     Returns:
         Configured BasicAgent instance
     """

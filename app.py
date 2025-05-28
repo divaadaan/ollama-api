@@ -11,18 +11,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 
-# Core functionality imports - no telemetry dependencies
 from core.llm_client import create_llm_client
 from core.agents import create_basic_agent
 
-# Telemetry imports - gracefully handle missing dependencies
 from telemetry import get_telemetry_config, is_telemetry_available
 
 # Configure logging and environment
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 load_dotenv()
-
 
 # Request models
 class PromptRequest(BaseModel):
@@ -32,8 +29,7 @@ class PromptRequest(BaseModel):
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
 
-
-# Global variables for clients (initialized in lifespan)
+# Global variables
 llm_client = None
 basic_agent = None
 telemetry_config = None
@@ -107,11 +103,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("🛑 Application shutting down")
 
-
-# Initialize telemetry configuration early
+#get telemetry config
 telemetry_config = get_telemetry_config()
 
-# Create FastAPI app
 app = FastAPI(
     title="Local LLM API",
     description="FastAPI application for interacting with local LLM models with optional telemetry",
@@ -119,7 +113,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Instrument FastAPI if telemetry is enabled (must be done before app starts)
+# Instrument FastAPI if telemetry is enabled
 if telemetry_config.enabled and is_telemetry_available():
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -232,7 +226,7 @@ def ask(
     max_tokens: Optional[int] = Query(None, description="Maximum tokens to generate"),
     temperature: Optional[float] = Query(None, description="Temperature for generation")
 ):
-    """Simple GET endpoint for LLM queries."""
+    """ GET endpoint for LLM queries."""
     if not prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
@@ -300,7 +294,7 @@ def get_stats():
     }
 
 
-# Gradio interface for development/testing
+# Gradio interface
 def run_agent_ui(prompt: str) -> str:
     """Gradio interface function for agent testing."""
     try:
