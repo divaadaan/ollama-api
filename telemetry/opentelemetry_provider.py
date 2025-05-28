@@ -16,9 +16,7 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from prometheus_client import start_http_server
 
 from .interface import (
-    TelemetryProvider,
     TelemetryTracer,
-    TelemetrySpan,
     TelemetryCounter,
     TelemetryHistogram,
     SpanStatus

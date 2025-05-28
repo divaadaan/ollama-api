@@ -17,12 +17,11 @@ class LLMClient:
     def __init__(
             self,
             api_url: str,
-            default_model: str = "mistral",
+            default_model: str = "qwen2.5-coder:7b",
             telemetry: Optional[TelemetryConfig] = None
     ):
         """
         Initialize LLM client.
-
         Args:
             api_url: URL for the LLM API endpoint
             default_model: Default model to use for requests
@@ -60,14 +59,12 @@ class LLMClient:
     ) -> Dict[str, Any]:
         """
         Generate text using the provided model.
-
         Args:
             prompt: Text prompt for generation
             model: Model to use (defaults to default_model)
             max_tokens: Maximum tokens to generate
             temperature: Temperature for generation
             **kwargs: Additional parameters
-
         Returns:
             Dictionary with response data:
             {
