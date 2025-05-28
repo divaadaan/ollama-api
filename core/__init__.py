@@ -13,6 +13,9 @@ __all__ = [
 
     # Agents
     'BasicAgent',
-    'LLMClientAdapter',
-    'create_basic_agent'
+    'create_basic_agent',
+
+    # Adapter
+    'SmolOllamaAdapter',
+    'create_smol_ollama_adapter'
 ]

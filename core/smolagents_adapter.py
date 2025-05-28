@@ -38,7 +38,7 @@ class SmolOllamaAdapter(Model):
         Initialize adapter with LLM client.
 
         Args:
-            llm_client: LLMClient instance ()
+            llm_client: LLMClient instance
             **kwargs: Additional Model parameters
         """
         super().__init__(**kwargs)
@@ -54,60 +54,38 @@ class SmolOllamaAdapter(Model):
         if "error" in result:
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
-        # Return dict with ALL expected smolagents fields
-        response_dict =  {
-            "content": result["content"],
-            "input_tokens": result.get("prompt_tokens", 0),
-            "output_tokens": result.get("completion_tokens", 0),
-            "prompt_tokens": result.get("prompt_tokens", 0),
-            "completion_tokens": result.get("completion_tokens", 0),
-            "total_tokens": result.get("total_tokens", 0),
-            "token_usage": {
-                "prompt_tokens": result.get("prompt_tokens", 0),
-                "completion_tokens": result.get("completion_tokens", 0),
-                "total_tokens": result.get("total_tokens", 0)
-            },
-            "usage": {
-                "prompt_tokens": result.get("prompt_tokens", 0),
-                "completion_tokens": result.get("completion_tokens", 0),
-                "total_tokens": result.get("total_tokens", 0)
-            },
-            "finish_reason": result.get("finish_reason", "stop"),
-            "model": result.get("model", "unknown")
-        }
+        # Fix: use "response" instead of "content" from llm_client
+        content = result.get("response", "")
 
-        logger.info(f"__call__ returning dict with keys: {list(response_dict.keys())}")
-        logger.info(f"__call__ input_tokens value: {response_dict.get('input_tokens', 'MISSING')}")
-        return response_dict
+        # Return simple dict with content for smolagents
+        return {"content": content}
 
     def generate(self, messages: List[Dict], temperature: float = 0.5, stop_sequences: Optional[List[str]] = None,
                  **kwargs) -> LLMResponse:
+        """Generate interface for smolagents compatibility."""
         prompt = self._format_messages(messages)
         result = self.llm_client.generate(prompt=prompt, temperature=temperature, **kwargs)
 
         if "error" in result:
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
-        prompt_tokens = result.get("prompt_tokens", 0)
-        completion_tokens = result.get("completion_tokens", 0)
-        total_tokens = result.get("total_tokens", 0)
+        # Fix: use "response" instead of "content" from llm_client
+        content = result.get("response", "")
 
+        # Note: Current LLMClient doesn't return token counts, so these will be 0
         response = LLMResponse(
-            content=result["content"],
-            input_tokens=prompt_tokens,  # smolagents expects this
-            output_tokens=completion_tokens,  # smolagents expects this
-            prompt_tokens=prompt_tokens,  # traditional name
-            completion_tokens=completion_tokens,  # traditional name
-            total_tokens=total_tokens,  # traditional name
-            finish_reason=result.get("finish_reason", "stop"),
+            content=content,
+            input_tokens=0,
+            output_tokens=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            finish_reason="stop",
             model=result.get("model", "unknown")
         )
 
-        logger.info(f"generate() returning LLMResponse with input_tokens: {response.input_tokens}")
-        logger.info(f"generate() LLMResponse attributes: {dir(response)}")
-
+        logger.info(f"generate() returning LLMResponse with content length: {len(content)}")
         return response
-
 
     def _format_messages(self, messages: List[Dict]) -> str:
         """

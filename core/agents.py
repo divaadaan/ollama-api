@@ -1,4 +1,6 @@
-"""AI Agent using the new architecture with clean separation of concerns."""
+"""
+AI Agent implementation using smolagents with optional telemetry support.
+"""
 
 import logging
 import time
@@ -46,6 +48,7 @@ class BasicAgent:
                 telemetry = TelemetryConfig(enabled=False)
 
         self._telemetry = telemetry
+
         self._tracer = telemetry.tracer
 
         # Pre-fetch metrics for performance
@@ -56,13 +59,10 @@ class BasicAgent:
         if tools is None:
             tools = [DuckDuckGoSearchTool()]
 
-        # Create the smolagents adapter
-        self.model_adapter = SmolOllamaAdapter(llm_client)
-
-        # Initialize the smolagents CodeAgent
+        # Initialize the smolagents CodeAgent with SmolOllamaAdapter
         self.agent = CodeAgent(
             tools=tools,
-            model=self.model_adapter
+            model=SmolOllamaAdapter(llm_client)
         )
 
         # Configure system prompt
@@ -91,8 +91,6 @@ class BasicAgent:
         - Use the standard smolagents format with <end_code>
         """
         self.agent.system_prompt += SYSTEM_PROMPT
-
-        logger.info(f"BasicAgent initialized with telemetry {'enabled' if telemetry.enabled else 'disabled'}")
 
     def __call__(self, question: str) -> str:
         """
@@ -162,18 +160,6 @@ class BasicAgent:
         """
         with self._tracer.start_span("agent_health_check") as span:
             try:
-                # Check the adapter health first
-                adapter_health = self.model_adapter.health_check()
-
-                if adapter_health["status"] != "healthy":
-                    span.set_status(SpanStatus.ERROR, "Adapter health check failed")
-                    return {
-                        "status": "unhealthy",
-                        "error": "Adapter health check failed",
-                        "adapter_health": adapter_health,
-                        "telemetry_enabled": self._telemetry.enabled
-                    }
-
                 # Quick agent test
                 test_result = self("Hello, just respond with 'Agent OK'")
 
@@ -182,8 +168,7 @@ class BasicAgent:
                     "status": "healthy",
                     "tools_count": len(self.agent.tools),
                     "telemetry_enabled": self._telemetry.enabled,
-                    "test_response_length": len(str(test_result)),
-                    "adapter_health": adapter_health
+                    "test_response_length": len(str(test_result))
                 }
 
             except Exception as e:
@@ -209,11 +194,10 @@ class BasicAgent:
         """
         return {
             "tools": [tool.__class__.__name__ for tool in self.agent.tools],
-            "model_adapter": self.model_adapter.__class__.__name__,
+            "model_adapter": self.agent.model.__class__.__name__,
             "llm_client_type": self.llm_client.__class__.__name__,
             "telemetry_enabled": self.telemetry_enabled,
-            "llm_telemetry_enabled": self.llm_client.telemetry_enabled,
-            "architecture": "Option2_CleanSeparation"
+            "llm_telemetry_enabled": self.llm_client.telemetry_enabled
         }
 
 
