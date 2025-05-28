@@ -9,25 +9,47 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LLMResponse:
-    """Proper response object for smolagents compatibility."""
-    content: str
+class TokenUsage:
+    """Token usage information."""
     input_tokens: int = 0
     output_tokens: int = 0
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    total_tokens: int = 0
+
+    @property
+    def prompt_tokens(self):
+        return self.input_tokens
+
+    @property
+    def completion_tokens(self):
+        return self.output_tokens
+
+    @property
+    def total_tokens(self):
+        return self.input_tokens + self.output_tokens
+
+
+@dataclass
+class ModelResponse:
+    """Response object that matches what smolagents expects."""
+    content: str
+    token_usage: TokenUsage
     finish_reason: str = "stop"
     model: str = "unknown"
 
-    def __post_init__(self):
-        """Set up token usage dict for compatibility."""
-        self.token_usage = {
-            "prompt_tokens": self.prompt_tokens,
-            "completion_tokens": self.completion_tokens,
-            "total_tokens": self.total_tokens
+    @property
+    def input_tokens(self):
+        return self.token_usage.input_tokens
+
+    @property
+    def output_tokens(self):
+        return self.token_usage.output_tokens
+
+    @property
+    def usage(self):
+        return {
+            "prompt_tokens": self.token_usage.input_tokens,
+            "completion_tokens": self.token_usage.output_tokens,
+            "total_tokens": self.token_usage.input_tokens + self.token_usage.output_tokens
         }
-        self.usage = self.token_usage
 
 
 class SmolOllamaAdapter(Model):
@@ -46,45 +68,47 @@ class SmolOllamaAdapter(Model):
         logger.info(
             f"SmolOllamaAdapter initialized with telemetry {'enabled' if llm_client.telemetry_enabled else 'disabled'}")
 
-    def __call__(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
+    def __call__(self, messages: List[Dict], **kwargs) -> ModelResponse:
         """Call interface for smolagents compatibility."""
-        prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt, **kwargs)
-
-        if "error" in result:
-            raise RuntimeError(f"LLM generation failed: {result['error']}")
-
-        # Fix: use "response" instead of "content" from llm_client
-        content = result.get("response", "")
-
-        # Return simple dict with content for smolagents
-        return {"content": content}
+        return self._generate_response(messages, **kwargs)
 
     def generate(self, messages: List[Dict], temperature: float = 0.5, stop_sequences: Optional[List[str]] = None,
-                 **kwargs) -> LLMResponse:
+                 **kwargs) -> ModelResponse:
         """Generate interface for smolagents compatibility."""
+        return self._generate_response(messages, temperature=temperature, stop_sequences=stop_sequences, **kwargs)
+
+    def _generate_response(self, messages: List[Dict], temperature: Optional[float] = None,
+                          stop_sequences: Optional[List[str]] = None, **kwargs) -> ModelResponse:
+        """Common generation logic for both __call__ and generate methods."""
         prompt = self._format_messages(messages)
-        result = self.llm_client.generate(prompt=prompt, temperature=temperature, **kwargs)
+
+        gen_kwargs = kwargs.copy()
+        if temperature is not None:
+            gen_kwargs['temperature'] = temperature
+
+        result = self.llm_client.generate(prompt=prompt, **gen_kwargs)
 
         if "error" in result:
             raise RuntimeError(f"LLM generation failed: {result['error']}")
 
-        # Fix: use "response" instead of "content" from llm_client
         content = result.get("response", "")
 
-        # Note: Current LLMClient doesn't return token counts, so these will be 0
-        response = LLMResponse(
+        token_usage = TokenUsage(
+            input_tokens=result.get("prompt_tokens", 0),
+            output_tokens=result.get("completion_tokens", 0)
+        )
+
+        response = ModelResponse(
             content=content,
-            input_tokens=0,
-            output_tokens=0,
-            prompt_tokens=0,
-            completion_tokens=0,
-            total_tokens=0,
-            finish_reason="stop",
+            token_usage=token_usage,
+            finish_reason=result.get("finish_reason", "stop"),
             model=result.get("model", "unknown")
         )
 
-        logger.info(f"generate() returning LLMResponse with content length: {len(content)}")
+        logger.debug(f"Returning ModelResponse with content length: {len(content)}, "
+                    f"input_tokens: {token_usage.input_tokens}, "
+                    f"output_tokens: {token_usage.output_tokens}")
+
         return response
 
     def _format_messages(self, messages: List[Dict]) -> str:
