@@ -9,9 +9,11 @@ import tempfile
 import logging
 from typing import List, Dict, Union, Optional
 from pathlib import Path
-
 import requests
-from smolagents import DuckDuckGoSearchTool, Tool
+from requests import RequestException
+from markdownify import markdownify
+
+from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, SpeechToTextTool, WikipediaSearchTool, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +285,9 @@ def get_default_tools() -> List[Tool]:
     """
     return [
         DuckDuckGoSearchTool(),
+        VisitWebpageTool(),
+        SpeechToTextTool(),
+        WikipediaSearchTool(),
         FileDownloadTool(),
         FileReaderTool()
     ]
@@ -291,6 +296,9 @@ def get_default_tools() -> List[Tool]:
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
     'search': DuckDuckGoSearchTool,
+    'visit': VisitWebpageTool,
+    'speech_to_text': SpeechToTextTool,
+    'search_wikipedia': WikipediaSearchTool,
     'download': FileDownloadTool,
     'read': FileReaderTool
 }
