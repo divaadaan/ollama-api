@@ -7,3 +7,5 @@ pydantic>=2.5.0
 gradio>=4.0.0
 smolagents>=0.1.0
 duckduckgo-search>=6.1.0
+pandas
+Pillow>=9.0.0

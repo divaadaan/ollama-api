@@ -51,7 +51,8 @@ class BasicAgent:
 
         # Set up tools
         if tools is None:
-            tools = [DuckDuckGoSearchTool()]
+            from .tools import get_default_tools
+            tools = get_default_tools()
 
         # Initialize the smolagents CodeAgent with SmolOllamaAdapter
         self.agent = CodeAgent(
