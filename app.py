@@ -3,7 +3,6 @@
 import logging
 import os
 import sys
-from contextlib import asynccontextmanager
 from typing import Optional
 
 import gradio as gr
@@ -17,11 +16,11 @@ from core.agents import create_basic_agent
 from telemetry import get_telemetry_config, is_telemetry_available
 
 # Configure logging and environment
-logging.basicConfig(level=logging.INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-# Request models
 class PromptRequest(BaseModel):
     """Request model for POST endpoints"""
     prompt: str
@@ -29,7 +28,6 @@ class PromptRequest(BaseModel):
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
 
-# Global variables
 llm_client = None
 basic_agent = None
 telemetry_config = None

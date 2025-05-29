@@ -90,10 +90,10 @@ services:
     container_name: llm-api-dev
     ports:
       - "8000:8000"
-      - "8001:8001"  # Prometheus metrics
+      - "8001:8001"
     environment:
       # Core API Configuration (consistent with lite/full)
-      - LLM_API_URL=${LLM_API_URL:-http://ollama:11434/api/generate}
+      - LLM_API_URL=${LLM_API_URL:-http://host.docker.internal:11434/api/generate}
       - DEFAULT_MODEL=${DEFAULT_MODEL:-mistral}
       - MAX_TIMEOUT=${MAX_TIMEOUT:-60}
       - STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-120}

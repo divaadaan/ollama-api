@@ -38,7 +38,7 @@ class FileDownloadTool(Tool):
     ) -> Dict[str, Union[str, int, None]]:
         """Download a file from URL."""
         try:
-            if directory is None:
+            if directory is None or directory == "":
                 directory = tempfile.gettempdir()
 
             os.makedirs(directory, exist_ok=True)

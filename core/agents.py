@@ -57,7 +57,11 @@ class BasicAgent:
         # Initialize the smolagents CodeAgent with SmolOllamaAdapter
         self.agent = CodeAgent(
             tools=tools,
-            model=SmolOllamaAdapter(llm_client)
+            model=SmolOllamaAdapter(llm_client),
+            additional_authorized_imports=[
+                'csv', 'pandas', 'json', 'os', 'pathlib', 'tempfile',
+                'urllib', 'requests', 'numpy', 'io', 'base64', 'uuid'
+            ]
         )
 
         # Configure system prompt
@@ -372,35 +376,30 @@ class BasicAgent:
         """Extract reasoning steps from logs"""
         reasoning_parts = []
 
+        logger.debug(f"Found {len(self.agent.memory.steps)} steps")
+        for i, step in enumerate(self.agent.memory.steps):
+            logger.debug(f"Step {i}: Type={step.__class__.__name__}, Attributes={dir(step)}")
+
         for step in self.agent.memory.steps:
             step_type = step.__class__.__name__
-
-            if step_type == 'LLMOutputStep':
-                # Extract content from LLM output step
-                if hasattr(step, 'content'):
-                    reasoning_parts.append(f"Agent reasoning: {step.content}")
-                elif hasattr(step, 'llm_output'):
-                    reasoning_parts.append(f"Agent reasoning: {step.llm_output}")
-
-            elif step_type == 'CodeExecutionStep':
-                # Extract code and result from execution step
-                if hasattr(step, 'code'):
-                    reasoning_parts.append(f"Executed code: {step.code}")
-                if hasattr(step, 'result'):
-                    reasoning_parts.append(f"Result: {step.result}")
-                elif hasattr(step, 'execution_result'):
-                    reasoning_parts.append(f"Result: {step.execution_result}")
-
-            elif step_type == 'TaskStep':
-                # Extract task information
+            if step_type == 'TaskStep':
                 if hasattr(step, 'task'):
                     reasoning_parts.append(f"Task: {step.task}")
 
-            elif step_type == 'SystemPromptStep':
-                # Skip system prompt or extract if needed
-                continue
+            elif step_type == 'ActionStep':
+                # Extract code and result from execution step
+                if hasattr(step, 'model_output'):
+                    reasoning_parts.append(f"Agent reasoning: {step.model_output}")
 
-        return "\n".join(reasoning_parts) if reasoning_parts else "No detailed reasoning captured - simple task?"
+                if hasattr(step, 'observations'):
+                    reasoning_parts.append(f"Execution results: {step.observations}")
+
+                if hasattr(step, 'tool_calls') and step.tool_calls:
+                    reasoning_parts.append(f"Tools used: {step.tool_calls}")
+
+        full_reason = "\n".join(reasoning_parts) if reasoning_parts else "No reasoning captured - simple task?"
+        logger.debug(f"The entire reasoning provided by the agent to the validator is: {full_reason}")
+        return full_reason
 
 # Factory function
 def create_basic_agent(
