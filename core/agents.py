@@ -113,7 +113,7 @@ class BasicAgent:
                     # Execute the agent
                     raw_answer = self.agent.run(question)
                     duration = time.time() - start_time
-                    execution_logs = self.agent.logs
+                    execution_logs = self.agent.memory.steps
                     reasoning_steps = self._extract_reasoning_from_logs(execution_logs)
 
                     span.set_attribute("agent.response_length", len(str(raw_answer)))
@@ -123,7 +123,7 @@ class BasicAgent:
 
                     logger.info(f"Agent returning unvalidated answer: {raw_answer}")
 
-                    validation_result = self._validate_answer(raw_answer, question, reasoning_steps, execution_logs)
+                    validation_result = self._validate_answer(raw_answer, question, reasoning_steps)
                     span.set_attribute("agent.validation_passed", validation_result["valid"])
 
 
@@ -210,7 +210,7 @@ class BasicAgent:
             "llm_telemetry_enabled": self.llm_client.telemetry_enabled
         }
 
-    def _validate_answer(self, raw_answer: str, question: str, reasoning_steps: str, logs: list) -> dict:
+    def _validate_answer(self, raw_answer: str, question: str, reasoning_steps: str) -> dict:
         """Validate answer using LLM client"""
         try:
             with self._tracer.start_span("agent validation") as span:
@@ -291,7 +291,7 @@ class BasicAgent:
                 2. The code execution leads logically to the final answer
                 3. For simple tasks, minimal reasoning is acceptable
                 
-                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise."""
+                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise. Include a brief explanation of how you came to this decision"""
 
                 result = self.llm_client.generate(
                     prompt=prompt,
@@ -359,21 +359,38 @@ class BasicAgent:
             return False
 
     def _extract_reasoning_from_logs(self, logs: list) -> str:
-        """Extract reasoning steps from smolagents logs"""
+        """Extract reasoning steps from logs"""
         reasoning_parts = []
 
-        for step in logs:
-            step_type = step.get('step_type', '')
+        for step in self.agent.memory.steps:
+            step_type = step.__class__.__name__
 
             if step_type == 'LLMOutputStep':
-                reasoning_parts.append(f"Agent reasoning: {step.get('content', '')}")
-            elif step_type == 'CodeExecutionStep':
-                code = step.get('code', '')
-                result = step.get('result', '')
-                reasoning_parts.append(f"Executed code: {code}")
-                reasoning_parts.append(f"Result: {result}")
+                # Extract content from LLM output step
+                if hasattr(step, 'content'):
+                    reasoning_parts.append(f"Agent reasoning: {step.content}")
+                elif hasattr(step, 'llm_output'):
+                    reasoning_parts.append(f"Agent reasoning: {step.llm_output}")
 
-        return "\n".join(reasoning_parts)
+            elif step_type == 'CodeExecutionStep':
+                # Extract code and result from execution step
+                if hasattr(step, 'code'):
+                    reasoning_parts.append(f"Executed code: {step.code}")
+                if hasattr(step, 'result'):
+                    reasoning_parts.append(f"Result: {step.result}")
+                elif hasattr(step, 'execution_result'):
+                    reasoning_parts.append(f"Result: {step.execution_result}")
+
+            elif step_type == 'TaskStep':
+                # Extract task information
+                if hasattr(step, 'task'):
+                    reasoning_parts.append(f"Task: {step.task}")
+
+            elif step_type == 'SystemPromptStep':
+                # Skip system prompt or extract if needed
+                continue
+
+        return "\n".join(reasoning_parts) if reasoning_parts else "No detailed reasoning captured - simple task?"
 
 # Factory function
 def create_basic_agent(
