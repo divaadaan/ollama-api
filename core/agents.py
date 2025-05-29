@@ -98,7 +98,7 @@ class BasicAgent:
         logger.info(f"Agent received question (first 50 chars): {question[:50]}...")
 
         for attempt in range(max_retries) :
-            logger.info(f"Attempt: {attempt}")
+            logger.info(f"Attempt: {attempt+1}")
 
             # Start telemetry span (no-op if telemetry disabled)
             with self._tracer.start_span("agent_run") as span:
@@ -113,6 +113,8 @@ class BasicAgent:
                     # Execute the agent
                     raw_answer = self.agent.run(question)
                     duration = time.time() - start_time
+                    execution_logs = self.agent.logs
+                    reasoning_steps = self._extract_reasoning_from_logs(execution_logs)
 
                     span.set_attribute("agent.response_length", len(str(raw_answer)))
                     span.set_attribute("agent.duration_seconds", duration)
@@ -121,7 +123,7 @@ class BasicAgent:
 
                     logger.info(f"Agent returning unvalidated answer: {raw_answer}")
 
-                    validation_result = self._validate_answer(raw_answer, question)
+                    validation_result = self._validate_answer(raw_answer, question, reasoning_steps, execution_logs)
                     span.set_attribute("agent.validation_passed", validation_result["valid"])
 
 
@@ -208,7 +210,7 @@ class BasicAgent:
             "llm_telemetry_enabled": self.llm_client.telemetry_enabled
         }
 
-    def _validate_answer(self, raw_answer: str, question: str) -> dict:
+    def _validate_answer(self, raw_answer: str, question: str, reasoning_steps: str, logs: list) -> dict:
         """Validate answer using LLM client"""
         try:
             with self._tracer.start_span("agent validation") as span:
@@ -219,7 +221,7 @@ class BasicAgent:
                 span.set_attribute("validation.final_answer_length", len(final_answer))
 
                 logger.info("Checking reasoning...")
-                reasoning_valid = self._check_reasoning(raw_answer, question, final_answer)
+                reasoning_valid = self._check_reasoning(question, reasoning_steps, final_answer)
                 logger.info(f"Reasoning check result: {reasoning_valid}")
 
                 logger.info("Checking format...")
@@ -235,7 +237,7 @@ class BasicAgent:
                 return {
                     "valid": is_valid,
                     "final_answer": final_answer,
-                    "reason": "basic_check"
+                    "reasoning_steps": reasoning_steps
                 }
 
         except Exception as e:
@@ -271,24 +273,25 @@ class BasicAgent:
 
         return formatted_answer
 
-    def _check_reasoning(self, raw_answer: str, question: str, final_answer: str) -> bool:
+    def _check_reasoning(self, question: str, reasoning_steps: str,final_answer: str) -> bool:
         """Check if the reasoning and results are correct"""
         logger.info("Performing reasoning validation...")
         try:
             with self._tracer.start_span("reasoning_check") as span:
-                prompt =f"""You are an expert in the field of critical thinking and analysis. Your task is to evaluate the following reasoning and results. Follow this approach:
-                            1. Understand the question completely
-                            2. Follow the submitted answer step by step  
-                            3. VALIDATE the answer by checking:
-                               - Does it directly answer the question?
-                               - Does the reasoning make sense?
-                            Explain why the answer is or is not satisfactory. Then write the final decision in all caps ("PASS" or "FAIL")
-                    
-                        Here is a user-given task and the agent steps: {raw_answer}
-                        Now here is the answer that was given: {final_answer}
-                        Please check that the reasoning process and results are correct: do they correctly answer the given task?
-                        CRITICAL- DO NOT USE THE ALL-CAPS TEXT "PASS" OR "FAIL" ANYWHERE IN THE TEXT EXCEPT FOR IN YOUR FINAL DECISION 
-                        """
+                prompt = f"""You are validating an AI agent's reasoning process. 
+                Task: {question}
+                
+                Agent's step-by-step reasoning and code execution:
+                {reasoning_steps}
+                
+                Final answer: {final_answer}
+                
+                Evaluate if:
+                1. The reasoning steps make sense for the task
+                2. The code execution leads logically to the final answer
+                3. For simple tasks, minimal reasoning is acceptable
+                
+                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise."""
 
                 result = self.llm_client.generate(
                     prompt=prompt,
@@ -355,6 +358,22 @@ class BasicAgent:
             logger.error(f"Format check failed: {str(e)}")
             return False
 
+    def _extract_reasoning_from_logs(self, logs: list) -> str:
+        """Extract reasoning steps from smolagents logs"""
+        reasoning_parts = []
+
+        for step in logs:
+            step_type = step.get('step_type', '')
+
+            if step_type == 'LLMOutputStep':
+                reasoning_parts.append(f"Agent reasoning: {step.get('content', '')}")
+            elif step_type == 'CodeExecutionStep':
+                code = step.get('code', '')
+                result = step.get('result', '')
+                reasoning_parts.append(f"Executed code: {code}")
+                reasoning_parts.append(f"Result: {result}")
+
+        return "\n".join(reasoning_parts)
 
 # Factory function
 def create_basic_agent(
