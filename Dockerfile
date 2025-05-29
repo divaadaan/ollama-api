@@ -46,4 +46,4 @@ ENV TELEMETRY_CONSOLE_EXPORT=true
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
-FROM full-build AS final #default to full
+FROM full-build AS final

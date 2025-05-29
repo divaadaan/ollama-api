@@ -94,42 +94,69 @@ class BasicAgent:
         Returns:
             Agent's response/answer
         """
+        max_retries =3
         logger.info(f"Agent received question (first 50 chars): {question[:50]}...")
 
-        # Start telemetry span (no-op if telemetry disabled)
-        with self._tracer.start_span("agent_run") as span:
-            start_time = time.time()
+        for attempt in range(max_retries) :
+            logger.info(f"Attempt: {attempt}")
 
-            span.set_attribute("agent.question_length", len(question))
-            span.set_attribute("agent.tools_count", len(self.agent.tools))
-            span.set_attribute("agent.model_telemetry", self.llm_client.telemetry_enabled)
+            # Start telemetry span (no-op if telemetry disabled)
+            with self._tracer.start_span("agent_run") as span:
+                start_time = time.time()
 
-            try:
-                # Execute the agent
-                final_answer = self.agent.run(question)
+                span.set_attribute("agent.question_length", len(question))
+                span.set_attribute("agent.tools_count", len(self.agent.tools))
+                span.set_attribute("agent.model_telemetry", self.llm_client.telemetry_enabled)
+                span.set_attribute("agent.max_retries", max_retries)
 
-                duration = time.time() - start_time
-                self._request_counter.add(1, {"status": "success"})
-                self._response_time.record(duration)
-                span.set_attribute("agent.response_length", len(str(final_answer)))
-                span.set_attribute("agent.duration_seconds", duration)
-                span.set_status(SpanStatus.OK)
+                try:
+                    # Execute the agent
+                    raw_answer = self.agent.run(question)
+                    duration = time.time() - start_time
 
-                logger.info(f"Agent completed successfully in {duration:.2f}s")
-                logger.info(f"Agent returning final answer: {final_answer}")
-                return final_answer
+                    span.set_attribute("agent.response_length", len(str(raw_answer)))
+                    span.set_attribute("agent.duration_seconds", duration)
 
-            except Exception as e:
-                duration = time.time() - start_time
-                error_msg = f"Agent execution failed: {str(e)}"
+                    logger.info(f"Agent completed successfully in {duration:.2f}s") ##########
 
-                self._request_counter.add(1, {"status": "error"})
-                span.set_attribute("agent.duration_seconds", duration)
-                span.set_attribute("agent.error_message", str(e))
-                span.set_status(SpanStatus.ERROR, error_msg)
+                    logger.info(f"Agent returning unvalidated answer: {raw_answer}")
 
-                logger.error(error_msg)
-                raise
+                    validation_result = self._validate_answer(raw_answer, question)
+                    span.set_attribute("agent.validation_passed", validation_result["valid"])
+
+
+                    if validation_result["valid"]:
+                        self._request_counter.add(1, {"status": "success", "attempt": str(attempt + 1)})
+                        self._response_time.record(duration)
+                        span.set_status(SpanStatus.OK)
+
+                        logger.info(f"Validation success on attempt  {attempt + 1}")
+                        return validation_result["final_answer"]
+                    else:
+                        logger.warning(f"Validation failed on attempt {attempt + 1}")
+                        span.set_attribute("agent.validation_reason", validation_result.get("reason", "unknown"))
+
+                        if attempt== max_retries -1:
+                            span.set_status(SpanStatus.ERROR, "All validation attempts failed")
+                            logger.error("All validation attempts failed, returning last raw answer")
+                            return raw_answer
+
+
+                except Exception as e:
+                    duration = time.time() - start_time
+                    error_msg = f"Agent execution failed on attempt {attempt + 1}: {str(e)}"
+
+                    self._request_counter.add(1, {"status": "error", "attempt": str(attempt + 1)})
+                    span.set_attribute("agent.duration_seconds", duration)
+                    span.set_attribute("agent.error_message", str(e))
+                    span.set_status(SpanStatus.ERROR, error_msg)
+
+                    logger.error(error_msg)
+                    if attempt == max_retries - 1:
+                        raise
+                    else:
+                        logger.info(f"Retrying... ({attempt + 2}/{max_retries})")
+        raise RuntimeError("Unexpected end of retry loop")
 
     def run(self, question: str) -> str:
         """Alias for __call__ method for explicit usage."""
@@ -143,7 +170,7 @@ class BasicAgent:
         """
         with self._tracer.start_span("agent_health_check") as span:
             try:
-                test_result = self("Hello, just respond with 'Agent OK'")
+                test_result = self("Your task is to respond with the text 'Agent OK'")
 
                 span.set_status(SpanStatus.OK)
                 return {
@@ -181,6 +208,153 @@ class BasicAgent:
             "llm_telemetry_enabled": self.llm_client.telemetry_enabled
         }
 
+    def _validate_answer(self, raw_answer: str, question: str) -> dict:
+        """Validate answer using LLM client"""
+        try:
+            with self._tracer.start_span("agent validation") as span:
+                final_answer = self._extract_final_answer(raw_answer)
+                logger.info(f"Extracted final answer: {final_answer}")
+
+                span.set_attribute("validation.raw_answer_length", len(raw_answer))
+                span.set_attribute("validation.final_answer_length", len(final_answer))
+
+                logger.info("Checking reasoning...")
+                reasoning_valid = self._check_reasoning(raw_answer, question, final_answer)
+                logger.info(f"Reasoning check result: {reasoning_valid}")
+
+                logger.info("Checking format...")
+                format_valid = self._check_format(final_answer, question)
+                logger.info(f"Format check result: {format_valid}")
+
+                is_valid = reasoning_valid and format_valid
+                logger.info(f"Validation result: {is_valid}")
+
+                span.set_attribute("validation.result", is_valid)
+                span.set_status(SpanStatus.OK)
+
+                return {
+                    "valid": is_valid,
+                    "final_answer": final_answer,
+                    "reason": "basic_check"
+                }
+
+        except Exception as e:
+            return {
+                "valid": False,
+                "final_answer": raw_answer,
+                "reason": f"validation_error: {str(e)}"
+            }
+
+    def _extract_final_answer(self, raw_answer: str) -> str:
+        """Extract and format the final answer from the raw response."""
+        sep_token = "FINAL ANSWER:"
+
+        if sep_token in raw_answer:
+            formatted_answer = raw_answer.split(sep_token)[1].strip()
+        else:
+            formatted_answer = raw_answer.strip()
+
+        formatted_answer = formatted_answer.replace("[", "").replace("]", "")
+
+        if not any(unit in formatted_answer.lower() for unit in ["$", "%", "dollars", "percent"]):
+            formatted_answer = formatted_answer.replace("$", "").replace("%", "")
+
+        # Remove commas from numbers
+        parts = formatted_answer.split(",")
+        formatted_parts = []
+        for part in parts:
+            part = part.strip()
+            if part.replace(".", "").isdigit():  # Check if it's a number
+                part = part.replace(",", "")
+            formatted_parts.append(part)
+        formatted_answer = ", ".join(formatted_parts)
+
+        return formatted_answer
+
+    def _check_reasoning(self, raw_answer: str, question: str, final_answer: str) -> bool:
+        """Check if the reasoning and results are correct"""
+        logger.info("Performing reasoning validation...")
+        try:
+            with self._tracer.start_span("reasoning_check") as span:
+                prompt =f"""You are an expert in the field of critical thinking and analysis. Your task is to evaluate the following reasoning and results. Follow this approach:
+                            1. Understand the question completely
+                            2. Follow the submitted answer step by step  
+                            3. VALIDATE the answer by checking:
+                               - Does it directly answer the question?
+                               - Does the reasoning make sense?
+                            Explain why the answer is or is not satisfactory. Then write the final decision in all caps ("PASS" or "FAIL")
+                    
+                        Here is a user-given task and the agent steps: {raw_answer}
+                        Now here is the answer that was given: {final_answer}
+                        Please check that the reasoning process and results are correct: do they correctly answer the given task?
+                        CRITICAL- DO NOT USE THE ALL-CAPS TEXT "PASS" OR "FAIL" ANYWHERE IN THE TEXT EXCEPT FOR IN YOUR FINAL DECISION 
+                        """
+
+                result = self.llm_client.generate(
+                    prompt=prompt,
+                    temperature=0.2,
+                    max_tokens=500
+                )
+
+                if "error" in result:
+                    logger.error(f"Reasoning check error: {result}")
+                    span.set_status(SpanStatus.ERROR, "Reasoning check failed")
+                    return False
+
+                response = result.get("content", "")
+                logger.info(f"Reasoning check response: {response}...")
+                span.set_attribute("reasoning_check.response", response[:200])
+
+                is_valid = "PASS" in response and "FAIL" not in response
+                logger.info(f"Reasoning validation result: {is_valid}")
+                span.set_attribute("reasoning_check.result", is_valid)
+                span.set_status(SpanStatus.OK)
+
+                return is_valid
+
+        except Exception as e:
+            logger.error(f"Reasoning check failed: {str(e)}")
+            return False
+
+    def _check_format(self, final_answer: str, question: str) -> bool:
+        """Check if the final answer is in the correct format using LLM."""
+        try:
+            with self._tracer.start_span("format_check") as span:
+                prompt = f"""You are a format validator. Check if the FINAL ANSWER matches the expected format for the given question.
+                Rules:
+                - Numbers: no commas, no units like $ or % unless specified
+                - Strings: few words as possible, no articles, no abbreviations, digits in plain text
+                - Lists: comma separated values following above rules
+            
+                Question: {question}
+                FINAL ANSWER: {final_answer}
+            
+                Does this answer follow the correct format? Respond with PASS if correct format, FAIL if incorrect format.
+                Be strict about formatting rules."""
+
+                result = self.llm_client.generate(
+                    prompt=prompt,
+                    temperature=0.1,  # Lower temperature for more consistent validation
+                    max_tokens=200
+                )
+
+                if "error" in result:
+                    span.set_status(SpanStatus.ERROR, "Format check failed")
+                    return False
+
+                response = result.get("content", "")
+                span.set_attribute("format_check.response", response[:200])
+
+                is_valid = "PASS" in response and "FAIL" not in response
+                span.set_attribute("format_check.result", is_valid)
+                span.set_status(SpanStatus.OK)
+
+                return is_valid
+
+        except Exception as e:
+            logger.error(f"Format check failed: {str(e)}")
+            return False
+
 
 # Factory function
 def create_basic_agent(
@@ -203,7 +377,7 @@ def create_basic_agent(
         if telemetry_enabled is not None:
             from telemetry import get_telemetry_config
             telemetry_config = get_telemetry_config(enabled=telemetry_enabled)
-        # Otherwise, inherit from llm_client (handled in BasicAgent.__init__)
+
 
     return BasicAgent(
         llm_client=llm_client,
