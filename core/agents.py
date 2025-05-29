@@ -319,11 +319,11 @@ class BasicAgent:
                     return False
 
                 response = result.get("content", "")
-                logger.info(f"Reasoning check response: {response}...")
+                logger.debug(f"Reasoning check response: {response}...")
                 span.set_attribute("reasoning_check.response", response[:200])
 
                 is_valid = "PASS" in response and "FAIL" not in response
-                logger.info(f"Reasoning validation result: {is_valid}")
+                logger.debug(f"Reasoning validation result: {is_valid}")
                 span.set_attribute("reasoning_check.result", is_valid)
                 span.set_status(SpanStatus.OK)
 
