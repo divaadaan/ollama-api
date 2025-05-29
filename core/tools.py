@@ -20,7 +20,7 @@ class FileDownloadTool(Tool):
     """Tool for downloading files from URLs."""
 
     name = "file_download"
-    description = """ Downloads a file from a URL and saves it locally. """
+    description = """Downloads a file from a URL and saves it locally. Returns a dictionary with 'path' key containing the file path."""
 
     inputs = {
         "url": {"type": "string", "description": "The URL to download the file from"},
@@ -132,7 +132,7 @@ class FileReaderTool(Tool):
     """Tool for reading various file types."""
 
     name = "file_reader"
-    description = """Reads content from various file types including text, CSV, JSON, and basic analysis."""
+    description = """Reads content from various file types including text, CSV, JSON, and basic analysis. Returns a dictionary with keys: 'status' (success/error), 'content' (file contents or analysis), 'file_path', 'file_size', 'file_extension', and 'encoding'. Use the 'content' value to access the file data."""
 
     inputs = {
         "file_path": {"type": "string", "description": "Path to the file to read"},
@@ -140,7 +140,7 @@ class FileReaderTool(Tool):
         "max_lines": {"type": "integer", "description": "Maximum lines to read for large files", "nullable": True}
     }
 
-    output_type = "string"
+    output_type = "object"
 
     def forward(
             self,

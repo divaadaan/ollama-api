@@ -69,6 +69,12 @@ class BasicAgent:
         2. Use code to perform calculations or operations when needed
         3. Always call final_answer() with a string argument containing your result
 
+        Tool usage examples:
+        - file_download returns a dictionary. To get the file path: 
+          result = file_download(url="..."); file_path = result['path']
+        - file_reader returns a dictionary. To get the content:
+          result = file_reader(file_path="..."); content = result['content']
+
         For your final answer format:
         - If asked for a number: provide just the number as a string (no commas, no units like $ or % unless specified)
         - If asked for a string: use few words as possible, no articles, no abbreviations, write digits in plain text
