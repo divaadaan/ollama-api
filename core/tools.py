@@ -171,8 +171,9 @@ class FileReaderTool(Tool):
                 content = self._read_csv_file(file_path, max_lines)
             elif file_extension in ['.jpg', '.jpeg', '.png', '.gif']:
                 content = self._analyze_image_file(file_path)
-            else:
-                # Try to read as text with error handling
+            elif file_extension == '.pdf':
+                content = self._read_pdf_file(file_path, max_lines)  # max_lines -> max_pages
+            else: # Try to read as text with error handling
                 content = self._read_text_file(file_path, encoding, max_lines, safe_mode=True)
 
             return {
@@ -246,7 +247,7 @@ class FileReaderTool(Tool):
         return result
 
     def _analyze_image_file(self, file_path: Path) -> str:
-        """Basic image file analysis."""
+        """Basic image file analysis for image size and dimensions."""
         try:
             from PIL import Image
 
@@ -263,6 +264,51 @@ class FileReaderTool(Tool):
             return f"Image file detected: {file_path.name} (PIL not available for analysis)"
         except Exception as e:
             return f"Image file: {file_path.name} (Error analyzing: {str(e)})"
+
+
+def _read_pdf_file(self, file_path: Path, max_pages: Optional[int] = None) -> str:
+    """Read PDF file content with text extraction."""
+    try:
+        import PyPDF2
+
+        with open(file_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            total_pages = len(pdf_reader.pages)
+
+            # Limit pages if specified
+            pages_to_read = min(total_pages, max_pages) if max_pages else total_pages
+
+            text_content = []
+            text_content.append(f"PDF Analysis for {file_path.name}:")
+            text_content.append(f"Total pages: {total_pages}")
+            text_content.append(f"Reading pages: 1 to {pages_to_read}")
+            text_content.append("-" * 50)
+
+            for page_num in range(pages_to_read):
+                try:
+                    page = pdf_reader.pages[page_num]
+                    page_text = page.extract_text()
+
+                    if page_text.strip():
+                        text_content.append(f"\n--- Page {page_num + 1} ---")
+                        text_content.append(page_text.strip())
+                    else:
+                        text_content.append(f"\n--- Page {page_num + 1} ---")
+                        text_content.append("[No extractable text found on this page]")
+
+                except Exception as e:
+                    text_content.append(f"\n--- Page {page_num + 1} ---")
+                    text_content.append(f"[Error reading page: {str(e)}]")
+
+            if pages_to_read < total_pages:
+                text_content.append(f"\n... (Remaining {total_pages - pages_to_read} pages not shown)")
+
+            return '\n'.join(text_content)
+
+    except ImportError:
+        return f"PDF file detected: {file_path.name} (PyPDF2 not available for text extraction)"
+    except Exception as e:
+        return f"PDF file: {file_path.name} (Error reading: {str(e)})"
 
 
 class SpeechToTextTool(Tool):
@@ -337,12 +383,12 @@ class ImageToTextTool(Tool):
 
     output_type = "string"
 
-    def __init__(self, hf_token: str, model: Optional[str] = None):
+    def __init__(self, open_ai_key: str, model: Optional[str] = None):
         """Initialize with HF token and model."""
         super().__init__()
         self.api_key = open_ai_key
         import openai
-        self.client = openai.OpenAI(api_key=openai_api_key)
+        self.client = openai.OpenAI(api_key=open_ai_key)
 
     def forward(self, file_path: str, prompt: str = "Describe this image in detail") -> str:
         try:
