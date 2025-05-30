@@ -1,5 +1,5 @@
--r requirements.txt
-
+-r requirements-full.txt
+#dev-mode specific requirements
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 httpx>=0.25.0
