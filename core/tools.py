@@ -317,6 +317,91 @@ class SpeechToTextTool(Tool):
             logger.error(error_msg, exc_info=True)
             return error_msg
 
+class ImageToTextTool(Tool):
+    """Image-to-Text tool using API """
+
+    name = "image_to_text"
+    description = """Transcribes downloaded image files to text. Input should be a file path to an image file."""
+
+    inputs = {
+        "file_path": {
+            "type": "string",
+            "description": "Path to downloaded image file (wav, mp3, m4a, flac, ogg)"
+        },
+        "prompt": {
+            "type": "string",
+            "description": "Custom prompt for image analysis (optional)",
+            "nullable": True
+        }
+    }
+
+    output_type = "string"
+
+    def __init__(self, hf_token: str, model: Optional[str] = None):
+        """Initialize with HF token and model."""
+        super().__init__()
+        self.api_key = open_ai_key
+        import openai
+        self.client = openai.OpenAI(api_key=openai_api_key)
+
+    def forward(self, file_path: str, prompt: str = "Describe this image in detail") -> str:
+        try:
+            import base64
+            from pathlib import Path
+
+            logger.info(f"Analyzing image: {file_path}")
+            path = Path(file_path)
+
+            supported_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            if path.suffix.lower() not in supported_extensions:
+                return f"Error: Unsupported image format. Supported: {', '.join(supported_extensions)}"
+
+            file_size = path.stat().st_size
+            max_size = 20 * 1024 * 1024  # 20MB
+            if file_size > max_size:
+                return f"Error: Image file too large ({file_size / 1024 / 1024:.1f}MB). Maximum size is 20MB."
+
+            with open(file_path, 'rb') as image_file:
+                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+
+            mime_types = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp'
+            }
+            mime_type = mime_types.get(path.suffix.lower(), 'image/jpeg')
+            logger.info(f"Sending {len(base64_image)} character base64 image to OpenAI")
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}
+                        }
+                    ]
+                }],
+                max_tokens=500
+            )
+            description = response.choices[0].message.content.strip()
+            logger.info(f"Image analysis successful: {len(description)} characters")
+            return description
+
+        except ImportError as e:
+            error_msg = f"OpenAI library not available: {str(e)}"
+            logger.error(error_msg)
+            return f"Error: {error_msg}. Please install: pip install openai"
+
+        except Exception as e:
+            error_msg = f"Image analysis failed: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
 def get_default_tools() -> List[Tool]:
     """
     Get the default set of tools for the BasicAgent.
@@ -325,6 +410,7 @@ def get_default_tools() -> List[Tool]:
         List of configured tool instances
     """
     hf_token = os.getenv("HF_TOKEN")
+    openai_key = os.getenv("OPEN_AI_KEY")
 
     tools = [
         DuckDuckGoSearchTool(),
@@ -333,12 +419,18 @@ def get_default_tools() -> List[Tool]:
         FileDownloadTool(),
         FileReaderTool()
     ]
-
+    #load HF tools
     if hf_token:
         tools.append(SpeechToTextTool(hf_token))
         logger.info("Speech-to-Text tool integrated")
     else:
         logger.warning("No HF token found, SpeechToTextTool is not enabled")
+    #load openai based tools
+    if openai_key:
+        tools.append(ImageToTextTool(openai_key))
+        logger.info("Image-to-Text tool integrated")
+    else:
+        logger.warning("No OpenAI API key found, ImageToTextTool not enabled")
 
     return tools
 
