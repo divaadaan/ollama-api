@@ -226,9 +226,6 @@ class BasicAgent:
         try:
             with self._tracer.start_span("agent validation") as span:
                 final_answer = self._extract_final_answer(raw_answer)
-                logger.debug(f"Raw answer: {raw_answer}")
-                logger.debug(f"Extracted final answer: {final_answer}")
-                logger.debug(f"Question: {question}")
                 logger.info(f"Extracted final answer: {final_answer}")
 
                 span.set_attribute("validation.raw_answer_length", len(raw_answer))
@@ -305,7 +302,7 @@ class BasicAgent:
                 2. The code execution leads logically to the final answer
                 3. For simple tasks, minimal reasoning is acceptable
                 
-                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise. Include a brief explanation of how you came to this decision
+                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise. Include a very brief explanation of how you came to this decision.
                 If the Agent has returned an unsuccessful API call then FAIL the Agent.
                 """
 

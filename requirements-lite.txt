@@ -11,3 +11,4 @@ pandas
 Pillow>=9.0.0
 markdownify
 wikipedia-api>=0.6.0
+huggingface_hub>=0.19.0

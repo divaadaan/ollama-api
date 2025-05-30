@@ -10,6 +10,7 @@ import logging
 from typing import List, Dict, Union, Optional
 from pathlib import Path
 import requests
+from huggingface_hub import InferenceClient
 
 from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, WikipediaSearchTool, Tool
 
@@ -299,61 +300,31 @@ class SpeechToTextTool(Tool):
         super().__init__()
         self.hf_token = hf_token
         self.model = os.getenv("STT_MODEL", "openai/whisper-large-v2")
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model}"
-        self.headers = {"Authorization": f"Bearer {hf_token}"}
+        self.client = InferenceClient(token=hf_token)
 
     def forward(self, file_path: str, language: Optional[str] = None) -> str:
         """Transcribe audio file to text."""
         try:
             logger.info(f"Transcribing audio file: {file_path}")
             path = Path(file_path)
-            mime_types = {
-                '.wav': 'audio/wav',
-                '.mp3': 'audio/mpeg',
-                '.m4a': 'audio/mp4'
-            }
-            file_extension = path.suffix.lower()
-            content_type = mime_types.get(file_extension, 'audio/wav')
 
             if not path.exists():
                 return f"Error: Audio file not found at {file_path}"
 
-            file_size = path.stat().st_size
-            max_size = 25 * 1024 * 1024  # 25MB limit
-            if file_size > max_size:
-                return f"Error: Audio file too large ({file_size / 1024 / 1024:.1f}MB). Maximum size is 25MB."
-
-            # Read audio file
-            with open(path, 'rb') as f:
-                audio_data = f.read()
-            logger.info(f"Sending {len(audio_data)} bytes to HuggingFace API")
-            files = {"file": (path.name, audio_data, content_type)}
-
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                files=files,
-                timeout=120
+            result = self.client.automatic_speech_recognition(
+                audio=str(path),
+                model=self.model
             )
 
-            response.raise_for_status()
-            result = response.json()
-            #get the text from the result
-            if isinstance(result, dict) and "text" in result:
-                transcription = result["text"].strip()
-                logger.info(f"Transcription successful: {len(transcription)} characters")
-                return transcription
-            else:
-                logger.error(f"Unexpected API response format: {result}")
-                return f"Error: Unexpected response format from speech-to-text API"
+            transcription = result.text.strip()
+            logger.debug(f"Result: {result.text[:100]}")
+            logger.info(f"Transcription successful: {len(transcription)} characters")
 
-        except requests.RequestException as e:
-            error_msg = f"API request failed: {str(e)}"
-            logger.error(error_msg)
-            return f"Speech-to-text API error: {str(e)}"
+            return transcription
+
         except Exception as e:
             error_msg = f"Speech-to-text processing failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
             return error_msg
 
 def get_default_tools() -> List[Tool]:
