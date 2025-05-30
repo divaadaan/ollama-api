@@ -60,7 +60,7 @@ class BasicAgent:
             model=SmolOllamaAdapter(llm_client),
             additional_authorized_imports=[
                 'csv', 'pandas', 'json', 'os', 'pathlib', 'tempfile',
-                'urllib', 'requests', 'numpy', 'io', 'base64', 'uuid'
+                'urllib', 'requests', 'numpy', 'io', 'base64', 'uuid, re'
             ]
         )
 
@@ -73,12 +73,45 @@ class BasicAgent:
         2. Use code to perform calculations or operations when needed
         3. Always call final_answer() with a string argument containing your result
 
+        CRITICAL FORMATTING REQUIREMENTS:
+        - Every response must include a Code section with ```py and <end_code>
+        - Never provide just analysis or thoughts without executable code
+        - Always return a final answer by calling final_answer("your_result_as_string")
+
+        Available tools and their exact function names:
+        - web_search(query="...") - Search the web
+        - visit_webpage(url="...") - Visit and extract content from a webpage
+        - search_wikipedia(query="...") - Search Wikipedia
+        - file_download(url="...") - Download files from URLs
+        - file_reader(file_path="...") - Read various file types
+        Additionally, depending on your setup you may have access to the following tools :
+        - speech_to_text(file_path="...") - Transcribe audio files to text
+        - image_to_text(file_path="...", prompt="...") - Analyze images and extract text/descriptions
+
         Tool usage examples:
         - file_download returns a dictionary. To get the file path: 
           result = file_download(url="..."); file_path = result['path']
         - file_reader returns a dictionary. To get the content:
           result = file_reader(file_path="..."); content = result['content']
-
+        - speech_to_text returns a string with the transcribed text:
+          transcription = speech_to_text(file_path="path/to/audio.mp3")
+        - image_to_text returns a string with the image description:
+          description = image_to_text(file_path="path/to/image.jpg", prompt="Describe this image")
+        - web_search returns results as formatted markdown text. To extract URLs:
+        ```python
+        import re
+        urls = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', search_results)
+        if urls:
+            title, url = urls[0]
+            webpage_content = visit_webpage(url=url)
+        ```
+        DO NOT use search_results[0] directly - this gets a character, not a URL!
+        
+        CRITICAL - Use exact tool function names!
+        visit_webpage(url="...") NOT visit_website() or visit_reliable_source()
+        web_search(query="...") NOT search_web()
+        file_download(url="...") NOT download_file()
+        
         For your final answer format:
         - If asked for a number: provide just the number as a string (no commas, no units like $ or % unless specified)
         - If asked for a string: use few words as possible, no articles, no abbreviations, write digits in plain text
@@ -89,12 +122,12 @@ class BasicAgent:
         - For "Capital of France?": final_answer("Paris")  
         - For "List first 3 primes": final_answer("2, 3, 5")
 
-        CRITICAL:
-        - Always convert your result to a string before calling final_answer()
-        - For math: final_answer(str(calculation_result))
-        - Keep code simple and direct
-        - Use the standard smolagents format with <end_code>
+        REMEMBER:
+        Always convert your result to a string before calling final_answer()
+        Every response needs executable code with the py...<end_code> format
+        Never provide just analysis - always include code that calls final_answer()
         """
+
         self.agent.system_prompt += SYSTEM_PROMPT
 
     def __call__(self, question: str) -> str:
