@@ -10,10 +10,8 @@ import logging
 from typing import List, Dict, Union, Optional
 from pathlib import Path
 import requests
-from requests import RequestException
-from markdownify import markdownify
 
-from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, SpeechToTextTool, WikipediaSearchTool, Tool
+from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, WikipediaSearchTool, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +274,80 @@ class FileReaderTool(Tool):
             return f"Image file: {file_path.name} (Error analyzing: {str(e)})"
 
 
+class SpeechToTextTool(Tool):
+    """Speech-to-Text tool using API """
+
+    name = "speech_to_text"
+    description = """Transcribes downloaded audio files to text. Input should be a file path to an audio file."""
+
+    inputs = {
+        "file_path": {
+            "type": "string",
+            "description": "Path to downloaded audio file (wav, mp3, m4a, flac, ogg)"
+        },
+        "language": {
+            "type": "string",
+            "description": "Language code for transcription (optional, e.g., 'en', 'es', 'fr')",
+            "nullable": True
+        }
+    }
+
+    output_type = "string"
+
+    def __init__(self, hf_token: str, model: str = "openai/whisper-large-v3"):
+        """Initialize with HuggingFace token and model."""
+        super().__init__()
+        self.hf_token = hf_token
+        self.model = model
+        self.api_url = f"https://api-inference.huggingface.co/models/{model}"
+        self.headers = {"Authorization": f"Bearer {hf_token}"}
+
+    def forward(self, file_path: str, language: Optional[str] = None) -> str:
+        """Transcribe audio file to text."""
+        try:
+            logger.info(f"Transcribing audio file: {file_path}")
+            path = Path(file_path)
+            if not path.exists():
+                return f"Error: Audio file not found at {file_path}"
+
+            file_size = path.stat().st_size
+            max_size = 25 * 1024 * 1024  # 25MB limit
+            if file_size > max_size:
+                return f"Error: Audio file too large ({file_size / 1024 / 1024:.1f}MB). Maximum size is 25MB."
+
+            # Read audio file
+            with open(path, 'rb') as f:
+                audio_data = f.read()
+
+            logger.info(f"Sending {len(audio_data)} bytes to HuggingFace API")
+
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                data=audio_data,
+                timeout=120
+            )
+
+            response.raise_for_status()
+            result = response.json()
+            #get the text from the result
+            if isinstance(result, dict) and "text" in result:
+                transcription = result["text"].strip()
+                logger.info(f"Transcription successful: {len(transcription)} characters")
+                return transcription
+            else:
+                logger.error(f"Unexpected API response format: {result}")
+                return f"Error: Unexpected response format from speech-to-text API"
+
+        except requests.RequestException as e:
+            error_msg = f"API request failed: {str(e)}"
+            logger.error(error_msg)
+            return f"Speech-to-text API error: {str(e)}"
+        except Exception as e:
+            error_msg = f"Speech-to-text processing failed: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
 def get_default_tools() -> List[Tool]:
     """
     Get the default set of tools for the BasicAgent.
@@ -283,7 +355,9 @@ def get_default_tools() -> List[Tool]:
     Returns:
         List of configured tool instances
     """
-    return [
+    hf_token = os.getenv("HF_TOKEN")
+
+    tools = [
         DuckDuckGoSearchTool(),
         VisitWebpageTool(),
         SpeechToTextTool(),
@@ -292,6 +366,13 @@ def get_default_tools() -> List[Tool]:
         FileReaderTool()
     ]
 
+    if hf_token:
+        tools.append(SpeechToTextTool(hf_token))
+        logger.info("Speech-to-Text tool integrated")
+    else:
+        logger.warning("No HF token found, SpeechToTextTool is not enabled")
+
+    return tools
 
 # Tool registry for easy access
 AVAILABLE_TOOLS = {
