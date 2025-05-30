@@ -65,68 +65,46 @@ class BasicAgent:
         )
 
         # Configure system prompt
-        SYSTEM_PROMPT = """
-        ADDITIONAL INSTRUCTIONS for this specific agent:
+        SYSTEM_PROMPT = """You are an AI assistant that solves tasks using available tools.
 
-        You are a general AI assistant. When solving tasks, follow this approach:
-        1. Think through the problem step by step
-        2. Use code to perform calculations or operations when needed
-        3. Always call final_answer() with a string argument containing your result
+        CRITICAL: You MUST call final_answer("result") to complete any task. 
+        DO NOT use print() to provide answers - print() is only for debugging.
+        NEVER end without calling final_answer().
 
-        CRITICAL FORMATTING REQUIREMENTS:
-        - Every response must include a Code section with ```py and <end_code>
-        - Never provide just analysis or thoughts without executable code
-        - Always return a final answer by calling final_answer("your_result_as_string")
+        REQUIRED PATTERN:
+        1. Gather information (use tools if needed)
+        2. Call final_answer("your_result_as_string") 
 
-        Available tools and their exact function names:
-        - web_search(query="...") - Search the web
-        - visit_webpage(url="...") - Visit and extract content from a webpage
+        AVAILABLE TOOLS:
+        - web_search(query="...") - Search the web and returns formatted markdown text
+        - visit_webpage(url="...") - Visit webpages  
         - search_wikipedia(query="...") - Search Wikipedia
-        - file_download(url="...") - Download files from URLs
-        - file_reader(file_path="...") - Read various file types
-        Additionally, depending on your setup you may have access to the following tools :
-        - speech_to_text(file_path="...") - Transcribe audio files to text
-        - image_to_text(file_path="...", prompt="...") - Analyze images and extract text/descriptions
+        - file_download(url="...") - Download files
+        - file_reader(file_path="...") - Read files
+        - speech_to_text(file_path="...") - Transcribe audio (if available)
+        - image_to_text(file_path="...", prompt="...") - Analyze images (if available)
 
-        Tool usage examples:
-        - file_download returns a dictionary. To get the file path: 
-          result = file_download(url="..."); file_path = result['path']
-        - file_reader returns a dictionary. To get the content:
-          result = file_reader(file_path="..."); content = result['content']
-        - speech_to_text returns a string with the transcribed text:
-          transcription = speech_to_text(file_path="path/to/audio.mp3")
-        - image_to_text returns a string with the image description:
-          description = image_to_text(file_path="path/to/image.jpg", prompt="Describe this image")
-        - web_search returns results as formatted markdown text. To extract URLs:
-        ```python
-        import re
-        urls = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', search_results)
-        if urls:
-            title, url = urls[0]
-            webpage_content = visit_webpage(url=url)
+        WRONG EXAMPLE:
+        ```py
+        population = 14000000
+        print(f"Tokyo population is {population}")  # WRONG - this doesn't complete the task
         ```
-        DO NOT use search_results[0] directly - this gets a character, not a URL!
-        
-        CRITICAL - Use exact tool function names!
-        visit_webpage(url="...") NOT visit_website() or visit_reliable_source()
-        web_search(query="...") NOT search_web()
-        file_download(url="...") NOT download_file()
-        
-        For your final answer format:
-        - If asked for a number: provide just the number as a string (no commas, no units like $ or % unless specified)
-        - If asked for a string: use few words as possible, no articles, no abbreviations, write digits in plain text
-        - If asked for a list: provide comma separated values following the above rules
+        CORRECT EXAMPLE:
+        ```py
+        population = 14000000
+        final_answer("14000000")  # CORRECT - this completes the task
+        ```
 
-        Examples:
-        - For "What is 2+2?": final_answer("4")
-        - For "Capital of France?": final_answer("Paris")  
-        - For "List first 3 primes": final_answer("2, 3, 5")
+        ANSWER FORMAT:
+        - Numbers: just the number (no commas, no units unless specified)
+        - Text: few words, no articles
+        - Lists: comma separated values
 
-        REMEMBER:
-        Always convert your result to a string before calling final_answer()
-        Every response needs executable code with the py...<end_code> format
-        Never provide just analysis - always include code that calls final_answer()
-        """
+        EXAMPLES:
+        - "What is 2+2?" → final_answer("4")
+        - "Capital of France?" → final_answer("Paris")
+
+        Remember: Every response must call final_answer() with your result as a string."""
 
         self.agent.system_prompt += SYSTEM_PROMPT
 
