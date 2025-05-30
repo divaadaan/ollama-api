@@ -294,12 +294,12 @@ class SpeechToTextTool(Tool):
 
     output_type = "string"
 
-    def __init__(self, hf_token: str, model: str = "openai/whisper-large-v3"):
-        """Initialize with HuggingFace token and model."""
+    def __init__(self, hf_token: str, model: Optional[str] = None):
+        """Initialize with HF token and model."""
         super().__init__()
         self.hf_token = hf_token
-        self.model = model
-        self.api_url = f"https://api-inference.huggingface.co/models/{model}"
+        self.model = os.getenv("STT_MODEL", "openai/whisper-large-v2")
+        self.api_url = f"https://api-inference.huggingface.co/models/{self.model}"
         self.headers = {"Authorization": f"Bearer {hf_token}"}
 
     def forward(self, file_path: str, language: Optional[str] = None) -> str:
