@@ -307,6 +307,14 @@ class SpeechToTextTool(Tool):
         try:
             logger.info(f"Transcribing audio file: {file_path}")
             path = Path(file_path)
+            mime_types = {
+                '.wav': 'audio/wav',
+                '.mp3': 'audio/mpeg',
+                '.m4a': 'audio/mp4'
+            }
+            file_extension = path.suffix.lower()
+            content_type = mime_types.get(file_extension, 'audio/wav')
+
             if not path.exists():
                 return f"Error: Audio file not found at {file_path}"
 
@@ -318,13 +326,13 @@ class SpeechToTextTool(Tool):
             # Read audio file
             with open(path, 'rb') as f:
                 audio_data = f.read()
-
             logger.info(f"Sending {len(audio_data)} bytes to HuggingFace API")
+            files = {"file": (path.name, audio_data, content_type)}
 
             response = requests.post(
                 self.api_url,
                 headers=self.headers,
-                data=audio_data,
+                files=files,
                 timeout=120
             )
 
@@ -360,7 +368,6 @@ def get_default_tools() -> List[Tool]:
     tools = [
         DuckDuckGoSearchTool(),
         VisitWebpageTool(),
-        SpeechToTextTool(),
         WikipediaSearchTool(),
         FileDownloadTool(),
         FileReaderTool()

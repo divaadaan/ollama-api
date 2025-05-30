@@ -305,7 +305,10 @@ class BasicAgent:
                 2. The code execution leads logically to the final answer
                 3. For simple tasks, minimal reasoning is acceptable
                 
-                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise. Include a brief explanation of how you came to this decision"""
+                Respond with PASS if the reasoning is adequate for the task complexity, FAIL otherwise. Include a brief explanation of how you came to this decision
+                If the Agent has returned an unsuccessful API call then FAIL the Agent.
+                """
+
 
                 result = self.llm_client.generate(
                     prompt=prompt,
@@ -376,10 +379,6 @@ class BasicAgent:
         """Extract reasoning steps from logs"""
         reasoning_parts = []
 
-        logger.debug(f"Found {len(self.agent.memory.steps)} steps")
-        for i, step in enumerate(self.agent.memory.steps):
-            logger.debug(f"Step {i}: Type={step.__class__.__name__}, Attributes={dir(step)}")
-
         for step in self.agent.memory.steps:
             step_type = step.__class__.__name__
             if step_type == 'TaskStep':
@@ -398,7 +397,6 @@ class BasicAgent:
                     reasoning_parts.append(f"Tools used: {step.tool_calls}")
 
         full_reason = "\n".join(reasoning_parts) if reasoning_parts else "No reasoning captured - simple task?"
-        logger.debug(f"The entire reasoning provided by the agent to the validator is: {full_reason}")
         return full_reason
 
 # Factory function
