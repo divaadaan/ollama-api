@@ -461,7 +461,7 @@ def get_default_tools() -> List[Tool]:
     tools = [
         DuckDuckGoSearchTool(),
         VisitWebpageTool(),
-        WikipediaSearchTool(),
+        WikipediaSearchTool(content_type="summary"),
         FileDownloadTool(),
         FileReaderTool()
     ]
