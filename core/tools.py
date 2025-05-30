@@ -165,7 +165,6 @@ class FileReaderTool(Tool):
 
             logger.info(f"Reading file: {file_path} ({file_size} bytes)")
 
-            # Handle different file types
             if file_extension in ['.txt', '.md', '.py', '.js', '.html', '.css', '.json']:
                 content = self._read_text_file(file_path, encoding, max_lines)
             elif file_extension == '.csv':
@@ -220,11 +219,10 @@ class FileReaderTool(Tool):
             else:
                 raise
 
-    def _read_csv_file(self, file_path: Path, max_lines: Optional[int]) -> str:
-        """Read CSV file with basic analysis."""
+    def _read_csv_file(self, file_path: Path, max_lines: Optional[int]) -> Dict[str, Union[str, int, list]]:
+        """Read CSV file"""
         import pandas as pd
 
-        # Read CSV with basic analysis
         dataframe = pd.read_csv(file_path, nrows=max_lines if max_lines else None)
 
         analysis = [
@@ -238,22 +236,14 @@ class FileReaderTool(Tool):
         for col, dtype in dataframe.dtypes.items():
             analysis.append(f"  {col}: {dtype}")
 
-        analysis.extend([
-            "",
-            "First few rows:",
-            dataframe.head().to_string(),
-            "",
-            "Basic statistics for numeric columns:"
-        ])
-
-        numeric_cols = dataframe.select_dtypes(include=['number']).columns
-        if len(numeric_cols) > 0:
-            analysis.append(dataframe[numeric_cols].describe().to_string())
-        else:
-            analysis.append("No numeric columns found.")
-
-        return '\n'.join(analysis)
-
+        result = {
+            'analysis': '\n'.join(analysis),
+            'rows': len(dataframe),
+            'columns': len(dataframe.columns),
+            'data': dataframe.to_dict('records')
+        }
+        logger.debug(f"CSV READ result: {result}")
+        return result
 
     def _analyze_image_file(self, file_path: Path) -> str:
         """Basic image file analysis."""
