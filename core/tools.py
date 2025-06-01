@@ -11,8 +11,10 @@ from typing import List, Dict, Union, Optional
 from pathlib import Path
 import requests
 from huggingface_hub import InferenceClient
-
 from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, WikipediaSearchTool, Tool
+from bs4 import BeautifulSoup
+import pytesseract
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +140,10 @@ class FileReaderTool(Tool):
     inputs = {
         "file_path": {"type": "string", "description": "Path to the file to read"},
         "encoding": {"type": "string", "description": "Text encoding (defaults to 'utf-8')", "nullable": True},
-        "max_lines": {"type": "integer", "description": "Maximum lines to read for large files", "nullable": True}
+        "max_lines": {"type": "integer", "description": "Maximum lines to read for large files", "nullable": True},
+        "analyze_with_llm": {"type": "boolean", "description": "Use LLM for data analysis (CSV/Excel only)",
+                             "nullable": True},
+        "analysis_query": {"type": "string", "description": "Specific question for LLM analysis", "nullable": True}
     }
 
     output_type = "object"
@@ -147,9 +152,11 @@ class FileReaderTool(Tool):
             self,
             file_path: str,
             encoding: str = 'utf-8',
-            max_lines: Optional[int] = None
+            max_lines: Optional[int] = None,
+            analyze_with_llm: bool = False,
+            analysis_query: Optional[str] = None
     ) -> Dict[str, Union[str, int, None]]:
-        """Read file content."""
+        """Read file content with optional LLM analysis."""
         try:
             file_path = Path(file_path)
 
@@ -168,12 +175,27 @@ class FileReaderTool(Tool):
             if file_extension in ['.txt', '.md', '.py', '.js', '.html', '.css', '.json']:
                 content = self._read_text_file(file_path, encoding, max_lines)
             elif file_extension == '.csv':
-                content = self._read_csv_file(file_path, max_lines)
+                basic_result = self._read_csv_file(file_path, max_lines)
+
+                if analyze_with_llm:
+                    # Re-read dataframe for LLM analysis
+                    import pandas as pd
+                    df = pd.read_csv(file_path, nrows=max_lines if max_lines else None)
+                    llm_analysis = self._analyze_csv_with_llm(file_path, df, analysis_query)
+                    content = {
+                        **basic_result,
+                        'llm_analysis': llm_analysis
+                    }
+                else:
+                    content = basic_result
+
+            elif file_extension in ['.xlsx', '.xls']:
+                content = self._read_excel_file(file_path, max_lines, analyze_with_llm, analysis_query)
             elif file_extension in ['.jpg', '.jpeg', '.png', '.gif']:
                 content = self._analyze_image_file(file_path)
             elif file_extension == '.pdf':
-                content = self._read_pdf_file(file_path, max_lines)  # max_lines -> max_pages
-            else: # Try to read as text with error handling
+                content = self._read_pdf_file(file_path, max_lines)
+            else:
                 content = self._read_text_file(file_path, encoding, max_lines, safe_mode=True)
 
             return {
@@ -245,6 +267,44 @@ class FileReaderTool(Tool):
         }
         logger.debug(f"CSV READ result: {result}")
         return result
+
+    def _read_excel_file(self, file_path: Path, max_lines: Optional[int], analyze_with_llm: bool = False,
+                         query: Optional[str] = None) -> Dict[str, Any]:
+        """Read Excel file with optional LLM analysis"""
+        try:
+            import pandas as pd
+
+            excel_file = pd.ExcelFile(file_path)
+            sheet_names = excel_file.sheet_names
+
+            result = {
+                'file_name': file_path.name,
+                'sheet_count': len(sheet_names),
+                'sheet_names': sheet_names,
+                'sheets': {}
+            }
+
+            for sheet_name in sheet_names:
+                df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=max_lines)
+
+                sheet_info = {
+                    'dimensions': f"{len(df)} rows × {len(df.columns)} columns",
+                    'columns': df.columns.tolist(),
+                    'data_types': df.dtypes.to_dict(),
+                    'sample_data': df.head().to_dict('records') if len(df) > 0 else []
+                }
+
+                if analyze_with_llm and len(df) > 0:
+                    sheet_info['llm_analysis'] = self._analyze_csv_with_llm(
+                        Path(f"{file_path.stem}_{sheet_name}"), df, query
+                    )
+
+                result['sheets'][sheet_name] = sheet_info
+
+            return result
+
+        except Exception as e:
+            return f"Error reading Excel file: {str(e)}"
 
     def _analyze_csv_with_llm(self, file_path: Path, dataframe, query: Optional[str] = None) -> str:
         """Analyze CSV data using LLM for insights"""
@@ -525,6 +585,174 @@ class ImageToTextTool(Tool):
             logger.error(error_msg)
             return error_msg
 
+
+class WebScrapeTool(Tool):
+    """Tool for scraping websites """
+    name = "web_scrape"
+    description = """Scrapes a website and extracts its text content. Uses headless browser for JavaScript-heavy sites. Returns the full text content of the webpage."""
+
+    inputs = {
+        "url": {"type": "string", "description": "The URL of the website to scrape"},
+        "selector": {"type": "string", "description": "Optional CSS selector to target specific content",
+                     "nullable": True},
+        "wait_time": {"type": "integer", "description": "Seconds to wait for page load (default: 3)", "nullable": True}
+    }
+
+    output_type = "string"
+
+    def forward(self, url: str, selector: Optional[str] = None, wait_time: Optional[int] = None) -> str:
+        """Scrape website content."""
+        try:
+            if wait_time is None:
+                wait_time = 3
+
+            logger.info(f"Scraping website: {url}")
+
+            try:
+                content = self._scrape_with_playwright(url, selector, wait_time)
+                logger.info(f"Successfully scraped with Playwright: {len(content)} characters")
+                return content
+            except Exception as e:
+                logger.warning(f"Playwright failed: {e}, falling back to requests")
+                return self._scrape_with_requests(url, selector)
+
+        except Exception as e:
+            error_msg = f"Website scraping failed: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
+    def _scrape_with_playwright(self, url: str, selector: Optional[str], wait_time: int) -> str:
+        """Scrape using Playwright for better JS support."""
+        from playwright.sync_api import sync_playwright
+        from bs4 import BeautifulSoup
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.set_default_timeout(30000)  # 30 seconds
+                page.goto(url, wait_until='domcontentloaded')
+                page.wait_for_timeout(wait_time * 1000)
+                html_content = page.content()
+                soup = BeautifulSoup(html_content, 'html.parser')
+
+                for script in soup(["script", "style", "nav", "footer", "header"]):
+                    script.decompose()
+
+                # Extract text from specific selector
+                if selector:
+                    selected_elements = soup.select(selector)
+                    if selected_elements:
+                        text = '\n'.join([elem.get_text() for elem in selected_elements])
+                    else:
+                        text = f"No content found for selector: {selector}"
+                else:
+                    text = soup.get_text()
+
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = '\n'.join(chunk for chunk in chunks if chunk)
+
+                return text
+
+            finally:
+                browser.close()
+
+    def _scrape_with_requests(self, url: str, selector: Optional[str]) -> str:
+        """Fallback scraping using requests."""
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
+
+        if selector:
+            selected_elements = soup.select(selector)
+            if selected_elements:
+                text = '\n'.join([elem.get_text() for elem in selected_elements])
+            else:
+                text = f"No content found for selector: {selector}"
+        else:
+            text = soup.get_text()
+
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = '\n'.join(chunk for chunk in chunks if chunk)
+
+        return text
+
+
+class OCRTool(Tool):
+    """Tool for extracting text from images using OCR."""
+
+    name = "extract_text_ocr"
+    description = """Extracts text from images using Optical Character Recognition (OCR). Useful for reading text from screenshots, documents, signs, etc."""
+
+    inputs = {
+        "image_path": {"type": "string", "description": "Path to the image file to extract text from"},
+        "language": {"type": "string",
+                     "description": "Language code for OCR (e.g., 'eng', 'spa', 'fra'). Default: 'eng'",
+                     "nullable": True}
+    }
+
+    output_type = "string"
+
+    def forward(self, image_path: str, language: Optional[str] = None) -> str:
+        """Extract text from image using OCR."""
+        try:
+            if language is None:
+                language = 'eng'
+
+            logger.info(f"Extracting text from image: {image_path}")
+
+            if not os.path.exists(image_path):
+                return f"Error: Image file not found at {image_path}"
+
+            supported_formats = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+            file_ext = Path(image_path).suffix.lower()
+            if file_ext not in supported_formats:
+                return f"Error: Unsupported image format {file_ext}. Supported: {', '.join(supported_formats)}"
+
+            try:
+                import pytesseract
+                from PIL import Image
+
+                image = Image.open(image_path)
+
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+
+                extracted_text = pytesseract.image_to_string(
+                    image,
+                    lang=language,
+                    config='--psm 6'  # Assume uniform block of text
+                )
+
+                cleaned_text = extracted_text.strip()
+
+                if not cleaned_text:
+                    return "No text found in the image."
+
+                logger.info(f"OCR successful: extracted {len(cleaned_text)} characters")
+                return f"Extracted text from {Path(image_path).name}:\n\n{cleaned_text}"
+
+            except ImportError:
+                return "Error: pytesseract not available. Please install: pip install pytesseract"
+            except Exception as e:
+                return f"Error during OCR processing: {str(e)}"
+
+        except Exception as e:
+            error_msg = f"OCR extraction failed: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+
 def get_default_tools() -> List[Tool]:
     """
     Get the default set of tools for the BasicAgent.
@@ -539,8 +767,10 @@ def get_default_tools() -> List[Tool]:
         DuckDuckGoSearchTool(),
         VisitWebpageTool(),
         WikipediaSearchTool(content_type="summary"),
+        WebScrapeTool(),
         FileDownloadTool(),
-        FileReaderTool()
+        FileReaderTool(),
+        OCRTool()
     ]
     #load HF tools
     if hf_token:
@@ -562,8 +792,10 @@ AVAILABLE_TOOLS = {
     'search': DuckDuckGoSearchTool,
     'visit': VisitWebpageTool,
     'speech_to_text': SpeechToTextTool,
+    'scrape': WebScrapeTool,
     'search_wikipedia': WikipediaSearchTool,
     'download': FileDownloadTool,
+    'ocr': OCRTool,
     'read': FileReaderTool
 }
 

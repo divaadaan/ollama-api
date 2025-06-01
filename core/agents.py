@@ -66,45 +66,29 @@ class BasicAgent:
 
         # Configure system prompt
         SYSTEM_PROMPT = """You are an AI assistant that solves tasks using available tools.
-
-        CRITICAL: You MUST call final_answer("result") to complete any task. 
-        DO NOT use print() to provide answers - print() is only for debugging.
-        NEVER end without calling final_answer().
-
         REQUIRED PATTERN:
         1. Gather information (use tools if needed)
         2. Call final_answer("your_result_as_string") 
-
+        CRITICAL: You MUST call final_answer("result") to complete any task. 
+        
         AVAILABLE TOOLS:
-        - web_search(query="...") - Search the web and returns formatted markdown text
-        - visit_webpage(url="...") - Visit webpages  
+        - web_search(query="...") - Search the web
+        - visit_webpage(url="...") - Visit webpages 
+        - web_scrape(url="...", selector="...", wait_time=3) - website scraping 
         - search_wikipedia(query="...") - Search Wikipedia
         - file_download(url="...") - Download files
         - file_reader(file_path="...") - Read files
-        - speech_to_text(file_path="...") - Transcribe audio (if available)
-        - image_to_text(file_path="...", prompt="...") - Analyze images (if available)
-
-        WRONG EXAMPLE:
-        ```py
-        population = 14000000
-        print(f"Tokyo population is {population}")  # WRONG - this doesn't complete the task
-        ```
-        CORRECT EXAMPLE:
-        ```py
-        population = 14000000
-        final_answer("14000000")  # CORRECT - this completes the task
-        ```
-
+        - speech_to_text(file_path="...") - Transcribe audio to text
+        - image_to_text(file_path="...", prompt="...") - Analyze images into text
+        - file_reader(file_path="...", analyze_with_llm=True, analysis_query="...") - Read files with optional LLM analysis for CSV/Excel
+        - extract_text_ocr(image_path="...", language="eng") - Extract text from images using OCR
+        
         ANSWER FORMAT:
         - Numbers: just the number (no commas, no units unless specified)
         - Text: few words, no articles
         - Lists: comma separated values
-
-        EXAMPLES:
-        - "What is 2+2?" → final_answer("4")
-        - "Capital of France?" → final_answer("Paris")
-
-        Remember: Every response must call final_answer() with your result as a string."""
+        Remember: Every response must call final_answer() with your result as a string.
+        """
 
         self.agent.system_prompt += SYSTEM_PROMPT
 
