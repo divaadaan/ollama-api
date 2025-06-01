@@ -56,12 +56,13 @@ class BasicAgent:
             model=SmolOllamaAdapter(llm_client),
             additional_authorized_imports=[
                 'csv', 'pandas', 'json', 'os', 'pathlib', 'tempfile',
-                'urllib', 'requests', 'numpy', 'io', 'base64', 'uuid, re'
+                'urllib', 'requests', 'numpy', 'io', 'base64', 'uuid, re, chess'
             ]
         )
 
         # Configure system prompt
-        SYSTEM_PROMPT = """You are an AI assistant that solves tasks using available tools.
+        SYSTEM_PROMPT = """You are an AI assistant that solves tasks using available tools. Provide clear, direct answers that appropriately address the question.
+        
         REQUIRED PATTERN:
         1. Gather information (use tools if needed)
         2. Call final_answer("your_result_as_string") 
@@ -79,10 +80,6 @@ class BasicAgent:
         - file_reader(file_path="...", analyze_with_llm=True, analysis_query="...") - Read files with optional LLM analysis for CSV/Excel
         - extract_text_ocr(image_path="...", language="eng") - Extract text from images using OCR
         
-        ANSWER FORMAT:
-        - Numbers: just the number (no commas, no units unless specified)
-        - Text: few words, no articles
-        - Lists: comma separated values
         Remember: Every response must call final_answer() with your result as a string.
         """
 
@@ -222,21 +219,16 @@ class BasicAgent:
             with self._tracer.start_span("agent validation") as span:
                 final_answer = self._extract_final_answer(raw_answer)
                 logger.info(f"Extracted final answer: {final_answer}")
-
                 span.set_attribute("validation.raw_answer_length", len(raw_answer))
                 span.set_attribute("validation.final_answer_length", len(final_answer))
 
                 logger.info("Checking reasoning...")
                 reasoning_valid = self._check_reasoning(question, reasoning_steps, final_answer)
+
                 logger.info(f"Reasoning check result: {reasoning_valid}")
+                is_valid = reasoning_valid
 
-                logger.info("Checking format...")
-                format_valid = self._check_format(final_answer, question)
-                logger.info(f"Format check result: {format_valid}")
-
-                is_valid = reasoning_valid and format_valid
                 logger.info(f"Validation result: {is_valid}")
-
                 span.set_attribute("validation.result", is_valid)
                 span.set_status(SpanStatus.OK)
 
@@ -265,20 +257,9 @@ class BasicAgent:
         else:
             formatted_answer = raw_answer.strip()
 
-        formatted_answer = formatted_answer.replace("[", "").replace("]", "")
-
-        if not any(unit in formatted_answer.lower() for unit in ["$", "%", "dollars", "percent"]):
-            formatted_answer = formatted_answer.replace("$", "").replace("%", "")
-
-        # Remove commas from numbers
-        parts = formatted_answer.split(",")
-        formatted_parts = []
-        for part in parts:
-            part = part.strip()
-            if part.replace(".", "").isdigit():  # Check if it's a number
-                part = part.replace(",", "")
-            formatted_parts.append(part)
-        formatted_answer = ", ".join(formatted_parts)
+        # Only remove brackets if they appear to be formatting artifacts
+        if formatted_answer.startswith('[') and formatted_answer.endswith(']'):
+            formatted_answer = formatted_answer[1:-1].strip()
 
         return formatted_answer
 
@@ -329,49 +310,6 @@ class BasicAgent:
 
         except Exception as e:
             logger.error(f"Reasoning check failed: {str(e)}")
-            return False
-
-    def _check_format(self, final_answer: str, question: str) -> bool:
-        """Check if the final answer is in the correct format using LLM."""
-        try:
-
-            if not isinstance(final_answer, str):
-                final_answer = str(final_answer)
-
-            with self._tracer.start_span("format_check") as span:
-                prompt = f"""You are a format validator. Check if the FINAL ANSWER matches the expected format for the given question.
-                Rules:
-                - Numbers: no commas, no units like $ or % unless specified
-                - Strings: few words as possible, no articles, no abbreviations, digits in plain text
-                - Lists: comma separated values following above rules
-            
-                Question: {question}
-                FINAL ANSWER: {final_answer}
-            
-                Does this answer follow the correct format? Respond with PASS if correct format, FAIL if incorrect format.
-                Be strict about formatting rules."""
-
-                result = self.llm_client.generate(
-                    prompt=prompt,
-                    temperature=0.1,  # Lower temperature for more consistent validation
-                    max_tokens=200
-                )
-
-                if "error" in result:
-                    span.set_status(SpanStatus.ERROR, "Format check failed")
-                    return False
-
-                response = result.get("content", "")
-                span.set_attribute("format_check.response", response[:200])
-
-                is_valid = "PASS" in response and "FAIL" not in response
-                span.set_attribute("format_check.result", is_valid)
-                span.set_status(SpanStatus.OK)
-
-                return is_valid
-
-        except Exception as e:
-            logger.error(f"Format check failed: {str(e)}")
             return False
 
     def _extract_reasoning_from_logs(self, logs: list) -> str:
