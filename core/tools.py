@@ -313,7 +313,7 @@ class FileReaderTool(Tool):
             import os
 
             api_url = os.getenv("LLM_API_URL", "http://host.docker.internal:11434/api/generate")
-            default_model = os.getenv("DEFAULT_MODEL", "mistral")
+            default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:14b")
 
             return create_llm_client(
                 api_url=api_url,
