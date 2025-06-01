@@ -7,7 +7,7 @@ import re
 import uuid
 import tempfile
 import logging
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, Any
 from pathlib import Path
 import requests
 from huggingface_hub import InferenceClient
@@ -304,7 +304,7 @@ class FileReaderTool(Tool):
             return result
 
         except Exception as e:
-            return f"Error reading Excel file: {str(e)}"
+            return f"Error reading Excel file: {e}"
 
     def _analyze_csv_with_llm(self, file_path: Path, dataframe, query: Optional[str] = None) -> str:
         """Analyze CSV data using LLM for insights"""
@@ -403,49 +403,49 @@ class FileReaderTool(Tool):
             return f"Image file: {file_path.name} (Error analyzing: {str(e)})"
 
 
-def _read_pdf_file(self, file_path: Path, max_pages: Optional[int] = None) -> str:
-    """Read PDF file content with text extraction."""
-    try:
-        import PyPDF2
+    def _read_pdf_file(self, file_path: Path, max_pages: Optional[int] = None) -> str:
+        """Read PDF file content with text extraction."""
+        try:
+            import PyPDF2
 
-        with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            total_pages = len(pdf_reader.pages)
+            with open(file_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                total_pages = len(pdf_reader.pages)
 
-            # Limit pages if specified
-            pages_to_read = min(total_pages, max_pages) if max_pages else total_pages
+                # Limit pages if specified
+                pages_to_read = min(total_pages, max_pages) if max_pages else total_pages
 
-            text_content = []
-            text_content.append(f"PDF Analysis for {file_path.name}:")
-            text_content.append(f"Total pages: {total_pages}")
-            text_content.append(f"Reading pages: 1 to {pages_to_read}")
-            text_content.append("-" * 50)
+                text_content = []
+                text_content.append(f"PDF Analysis for {file_path.name}:")
+                text_content.append(f"Total pages: {total_pages}")
+                text_content.append(f"Reading pages: 1 to {pages_to_read}")
+                text_content.append("-" * 50)
 
-            for page_num in range(pages_to_read):
-                try:
-                    page = pdf_reader.pages[page_num]
-                    page_text = page.extract_text()
+                for page_num in range(pages_to_read):
+                    try:
+                        page = pdf_reader.pages[page_num]
+                        page_text = page.extract_text()
 
-                    if page_text.strip():
+                        if page_text.strip():
+                            text_content.append(f"\n--- Page {page_num + 1} ---")
+                            text_content.append(page_text.strip())
+                        else:
+                            text_content.append(f"\n--- Page {page_num + 1} ---")
+                            text_content.append("[No extractable text found on this page]")
+
+                    except Exception as e:
                         text_content.append(f"\n--- Page {page_num + 1} ---")
-                        text_content.append(page_text.strip())
-                    else:
-                        text_content.append(f"\n--- Page {page_num + 1} ---")
-                        text_content.append("[No extractable text found on this page]")
+                        text_content.append(f"[Error reading page: {str(e)}]")
 
-                except Exception as e:
-                    text_content.append(f"\n--- Page {page_num + 1} ---")
-                    text_content.append(f"[Error reading page: {str(e)}]")
+                if pages_to_read < total_pages:
+                    text_content.append(f"\n... (Remaining {total_pages - pages_to_read} pages not shown)")
 
-            if pages_to_read < total_pages:
-                text_content.append(f"\n... (Remaining {total_pages - pages_to_read} pages not shown)")
+                return '\n'.join(text_content)
 
-            return '\n'.join(text_content)
-
-    except ImportError:
-        return f"PDF file detected: {file_path.name} (PyPDF2 not available for text extraction)"
-    except Exception as e:
-        return f"PDF file: {file_path.name} (Error reading: {str(e)})"
+        except ImportError:
+            return f"PDF file detected: {file_path.name} (PyPDF2 not available for text extraction)"
+        except Exception as e:
+            return f"PDF file: {file_path.name} (Error reading: {str(e)})"
 
 
 class SpeechToTextTool(Tool):
