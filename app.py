@@ -36,8 +36,6 @@ def startup_health_checks():
     """Perform all startup health checks."""
     logger.info("Starting application health checks...")
 
-    startup_timeout = int(os.getenv("STARTUP_TIMEOUT", "120"))
-
     # Check LLM client
     health_result = llm_client.health_check()
     if health_result["status"] != "healthy":

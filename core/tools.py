@@ -246,6 +246,83 @@ class FileReaderTool(Tool):
         logger.debug(f"CSV READ result: {result}")
         return result
 
+    def _analyze_csv_with_llm(self, file_path: Path, dataframe, query: Optional[str] = None) -> str:
+        """Analyze CSV data using LLM for insights"""
+        try:
+            # Get LLM client from environment or create a simple one
+            llm_client = self._get_llm_client()
+            if not llm_client:
+                return "LLM analysis not available - no LLM client configured"
+
+            # Prepare data summary for LLM
+            df_summary = f"""CSV File: {file_path.name}
+            Dimensions: {len(dataframe)} rows × {len(dataframe.columns)} columns
+            Columns: {', '.join(dataframe.columns.tolist())}
+        
+            Data Types:
+            {dataframe.dtypes.to_string()}
+        
+            Sample Data (first 5 rows):
+            {dataframe.head().to_string()}
+        
+            Statistical Summary:
+            {dataframe.describe().to_string()}
+            """
+
+            # Create analysis prompt
+            if query:
+                prompt = f"""Analyze this CSV data and answer the specific question: "{query}"
+                {df_summary}
+                Please provide:
+                1. Direct answer to the question
+                2. Supporting analysis and insights
+                3. Any relevant patterns or trends
+                """
+            else:
+                prompt = f"""Analyze this CSV data and provide comprehensive insights:
+                {df_summary}
+            
+                Please provide:
+                1. Summary of data structure and content
+                2. Key patterns and insights
+                3. Potential data quality issues
+                4. Interesting findings or correlations
+                5. Suggestions for further analysis
+                Format your response clearly with sections and bullet points."""
+
+            # Get LLM analysis
+            result = llm_client.generate(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=1000
+            )
+
+            if "error" in result:
+                return f"LLM analysis failed: {result['error']}"
+
+            return result.get("content", "No analysis generated")
+
+        except Exception as e:
+            return f"Error in LLM analysis: {str(e)}"
+
+    def _get_llm_client(self):
+        """Get LLM client from global context or environment"""
+        try:
+            # Try to import and create a basic LLM client
+            from core.llm_client import create_llm_client
+            import os
+
+            api_url = os.getenv("LLM_API_URL", "http://host.docker.internal:11434/api/generate")
+            default_model = os.getenv("DEFAULT_MODEL", "mistral")
+
+            return create_llm_client(
+                api_url=api_url,
+                default_model=default_model,
+                telemetry_enabled=False
+            )
+        except:
+            return None
+
     def _analyze_image_file(self, file_path: Path) -> str:
         """Basic image file analysis for image size and dimensions."""
         try:

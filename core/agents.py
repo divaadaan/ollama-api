@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Optional
 
-from smolagents import CodeAgent, DuckDuckGoSearchTool
+from smolagents import CodeAgent
 
 from telemetry import TelemetryConfig, SpanStatus
 from .smolagents_adapter import SmolOllamaAdapter
@@ -27,8 +27,8 @@ class BasicAgent:
         Initialize BasicAgent.
         Args:
             llm_client: LLMClient instance for language model access
-            telemetry: Optional telemetry configuration. If None, uses llm_client's telemetry
-            tools: Optional list of tools for the agent. Defaults to DuckDuckGoSearchTool
+            telemetry: Optional telemetry configuration
+            tools: Optional list of tools for the agent
         """
         self.llm_client = llm_client
 
