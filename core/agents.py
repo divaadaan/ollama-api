@@ -13,7 +13,6 @@ from .smolagents_adapter import SmolOllamaAdapter
 
 logger = logging.getLogger(__name__)
 
-
 class BasicAgent:
     """This is a BasicAgent """
 
@@ -32,7 +31,7 @@ class BasicAgent:
         """
         self.llm_client = llm_client
 
-        # Set up telemetry - inherit from LLM client if not provided
+        # Set up telemetry
         if telemetry is None:
             if hasattr(llm_client, '_telemetry'):
                 telemetry = llm_client._telemetry
@@ -45,16 +44,13 @@ class BasicAgent:
 
         self._tracer = telemetry.tracer
 
-        # Pre-fetch metrics for performance
         self._request_counter = telemetry.agent_request_counter
         self._response_time = telemetry.agent_response_time
 
-        # Set up tools
         if tools is None:
             from .tools import get_default_tools
             tools = get_default_tools()
 
-        # Initialize the smolagents CodeAgent with SmolOllamaAdapter
         self.agent = CodeAgent(
             tools=tools,
             model=SmolOllamaAdapter(llm_client),
@@ -118,6 +114,10 @@ class BasicAgent:
                 try:
                     # Execute the agent
                     raw_answer = self.agent.run(question)
+
+                    if not isinstance(raw_answer, str):
+                        raw_answer = str(raw_answer)
+
                     duration = time.time() - start_time
                     execution_logs = self.agent.memory.steps
                     reasoning_steps = self._extract_reasoning_from_logs(execution_logs)
@@ -255,6 +255,9 @@ class BasicAgent:
 
     def _extract_final_answer(self, raw_answer: str) -> str:
         """Extract and format the final answer from the raw response."""
+        if not isinstance(raw_answer, str):
+            raw_answer = str(raw_answer)
+
         sep_token = "FINAL ANSWER:"
 
         if sep_token in raw_answer:
@@ -331,6 +334,10 @@ class BasicAgent:
     def _check_format(self, final_answer: str, question: str) -> bool:
         """Check if the final answer is in the correct format using LLM."""
         try:
+
+            if not isinstance(final_answer, str):
+                final_answer = str(final_answer)
+
             with self._tracer.start_span("format_check") as span:
                 prompt = f"""You are a format validator. Check if the FINAL ANSWER matches the expected format for the given question.
                 Rules:
