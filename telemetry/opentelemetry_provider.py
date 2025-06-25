@@ -6,20 +6,20 @@ This module is optionally imported depending on if telemetry is enabled
 from contextlib import contextmanager
 from typing import Dict, Optional
 
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry import metrics, trace
 from opentelemetry.exporter.prometheus import PrometheusMetricReader
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from prometheus_client import start_http_server
 
 from .interface import (
-    TelemetryTracer,
-    TelemetryCounter,
-    TelemetryHistogram,
-    SpanStatus
+   SpanStatus,
+   TelemetryCounter,
+   TelemetryHistogram,
+   TelemetryTracer
 )
 
 

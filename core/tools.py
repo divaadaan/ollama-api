@@ -2,20 +2,20 @@
 Tools for the BasicAgent using smolagents framework.
 """
 
+import logging
 import os
 import re
-import uuid
 import tempfile
-import logging
-from typing import List, Dict, Union, Optional, Any
+import uuid
 from pathlib import Path
-import requests
-from huggingface_hub import InferenceClient
-from smolagents import DuckDuckGoSearchTool, VisitWebpageTool, WikipediaSearchTool, Tool
-from bs4 import BeautifulSoup
-import pytesseract
-from PIL import Image
+from typing import Any, Dict, List, Optional, Union
 
+import requests
+from bs4 import BeautifulSoup
+from huggingface_hub import InferenceClient
+from PIL import Image
+import pytesseract
+from smolagents import DuckDuckGoSearchTool, Tool, VisitWebpageTool, WikipediaSearchTool
 logger = logging.getLogger(__name__)
 
 

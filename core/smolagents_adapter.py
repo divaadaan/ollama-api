@@ -2,7 +2,8 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from smolagents import Model
 
 logger = logging.getLogger(__name__)

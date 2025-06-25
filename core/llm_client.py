@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Optional, Dict, Any, Iterator
 import os
+
 import requests
 
 from telemetry import TelemetryConfig, SpanStatus

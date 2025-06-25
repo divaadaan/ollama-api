@@ -8,7 +8,7 @@ from typing import Optional
 
 from smolagents import CodeAgent
 
-from telemetry import TelemetryConfig, SpanStatus
+from telemetry import SpanStatus, TelemetryConfig
 from .smolagents_adapter import SmolOllamaAdapter
 
 logger = logging.getLogger(__name__)

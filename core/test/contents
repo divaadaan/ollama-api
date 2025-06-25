@@ -1,0 +1,25 @@
+sample.txt - Simple text content for reading tests
+multiline.txt - Multi-paragraph text for content analysis
+
+Structured Data:
+
+test_data.csv - Sample CSV with various data types (strings, numbers, dates)
+test_data.json - JSON with nested structures
+test_data.xlsx - Excel file with multiple sheets
+
+Media Files:
+
+test_image.png - Image with clear text for OCR testing
+test_photo.jpg - Photo for image analysis testing
+test_audio.wav - Short audio clip for speech-to-text testing
+
+Documents:
+
+sample.pdf - Simple PDF with extractable text
+
+TEST_WEBSITES = {
+    "simple_static": "http://example.com",  # Always stable
+    "single_serving": "http://hasthelargehadroncolliderdestroyedtheworldyet.com",
+    "text_heavy": "http://textfiles.com/100/",  # Rich text content
+    "basic_html": "http://motherfuckingwebsite.com"  # Minimal HTML structure
+}

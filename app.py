@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+import time
 from typing import Optional
 
 import gradio as gr
@@ -10,9 +11,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 
-from core.llm_client import create_llm_client
 from core.agents import create_basic_agent
-
+from core.llm_client import create_llm_client
+from core.test_toolkit import ToolkitTester
 from telemetry import get_telemetry_config, is_telemetry_available
 
 # Configure logging and environment
@@ -289,6 +290,21 @@ def get_stats():
         }
     }
 
+@app.get("/toolkit-test")
+async def toolkit_test():
+    """toolkit testing endpoint."""
+    try:
+        tester = ToolkitTester(basic_agent.agent.tools)
+        results = await tester.run_all_tests()
+
+        return {
+            "status": "completed",
+            "timestamp": time.time(),
+            "results": results,
+            "summary": tester.generate_summary()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Toolkit test failed: {str(e)}")
 
 # Gradio interface
 def run_agent_ui(prompt: str) -> str:
